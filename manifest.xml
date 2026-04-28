@@ -1,11 +1,9 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<OfficeApp
-  xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+<OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
   xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
   xmlns:mailappor="http://schemas.microsoft.com/office/mailappversionoverrides/1.0"
   xsi:type="MailApp">
-
   <Id>3a7f8b2c-9d1e-4f6a-b5c3-2e8d7f1a9b0c</Id>
   <Version>1.0.0.0</Version>
   <ProviderName>Translation Team</ProviderName>
@@ -15,59 +13,49 @@
   <IconUrl DefaultValue="https://34ciel-cyber.github.io/outlook-translator/icon-32.png"/>
   <HighResolutionIconUrl DefaultValue="https://34ciel-cyber.github.io/outlook-translator/icon-80.png"/>
   <SupportUrl DefaultValue="https://34ciel-cyber.github.io/outlook-translator/"/>
-
   <AppDomains>
     <AppDomain>https://34ciel-cyber.github.io</AppDomain>
   </AppDomains>
-
   <Hosts>
     <Host Name="Mailbox"/>
   </Hosts>
-
   <Requirements>
     <Sets>
       <Set Name="Mailbox" MinVersion="1.1"/>
     </Sets>
   </Requirements>
-
   <FormSettings>
     <Form xsi:type="ItemRead">
       <DesktopSettings>
         <SourceLocation DefaultValue="https://34ciel-cyber.github.io/outlook-translator/taskpane.html"/>
-        <RequestedHeight>500</RequestedHeight>
+        <RequestedHeight>250</RequestedHeight>
       </DesktopSettings>
     </Form>
   </FormSettings>
-
-  <Permissions>ReadWriteMailbox</Permissions>
-
+  <Permissions>ReadWriteItem</Permissions>
   <Rule xsi:type="RuleCollection" Mode="Or">
     <Rule xsi:type="ItemIs" ItemType="Message" FormType="Read"/>
+    <Rule xsi:type="ItemIs" ItemType="Message" FormType="Edit"/>
   </Rule>
-
   <DisableEntityHighlighting>false</DisableEntityHighlighting>
-
   <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides" xsi:type="VersionOverridesV1_0">
-
     <Requirements>
       <bt:Sets DefaultMinVersion="1.3">
         <bt:Set Name="Mailbox"/>
       </bt:Sets>
     </Requirements>
-
     <Hosts>
       <Host xsi:type="MailHost">
         <DesktopFormFactor>
-          <FunctionFile resid="Commands.Url"/>
           <ExtensionPoint xsi:type="MessageReadCommandSurface">
             <OfficeTab id="TabDefault">
-              <Group id="msgReadGroup">
-                <Label resid="GroupLabel"/>
+              <Group id="msgReadCmdGroup">
+                <Label resid="CommandsGroup.Label"/>
                 <Control xsi:type="Button" id="msgReadOpenPaneButton">
                   <Label resid="TaskpaneButton.Label"/>
                   <Supertip>
-                    <Title resid="TaskpaneButton.Label"/>
-                    <Description resid="TaskpaneButton.Tooltip"/>
+                    <Title resid="TaskpaneButton.SupertipTitle"/>
+                    <Description resid="TaskpaneButton.SupertipText"/>
                   </Supertip>
                   <Icon>
                     <bt:Image size="16" resid="Icon.16x16"/>
@@ -83,13 +71,13 @@
           </ExtensionPoint>
           <ExtensionPoint xsi:type="MessageComposeCommandSurface">
             <OfficeTab id="TabDefault">
-              <Group id="msgComposeGroup">
-                <Label resid="GroupLabel"/>
+              <Group id="msgComposeCmdGroup">
+                <Label resid="CommandsGroup.Label"/>
                 <Control xsi:type="Button" id="msgComposeOpenPaneButton">
                   <Label resid="TaskpaneButton.Label"/>
                   <Supertip>
-                    <Title resid="TaskpaneButton.Label"/>
-                    <Description resid="TaskpaneButton.Tooltip"/>
+                    <Title resid="TaskpaneButton.SupertipTitle"/>
+                    <Description resid="TaskpaneButton.SupertipText"/>
                   </Supertip>
                   <Icon>
                     <bt:Image size="16" resid="Icon.16x16"/>
@@ -106,7 +94,6 @@
         </DesktopFormFactor>
       </Host>
     </Hosts>
-
     <Resources>
       <bt:Images>
         <bt:Image id="Icon.16x16" DefaultValue="https://34ciel-cyber.github.io/outlook-translator/icon-16.png"/>
@@ -114,18 +101,16 @@
         <bt:Image id="Icon.80x80" DefaultValue="https://34ciel-cyber.github.io/outlook-translator/icon-80.png"/>
       </bt:Images>
       <bt:Urls>
-        <bt:Url id="Commands.Url" DefaultValue="https://34ciel-cyber.github.io/outlook-translator/commands.html"/>
         <bt:Url id="Taskpane.Url" DefaultValue="https://34ciel-cyber.github.io/outlook-translator/taskpane.html"/>
       </bt:Urls>
       <bt:ShortStrings>
-        <bt:String id="GroupLabel" DefaultValue="Translator"/>
+        <bt:String id="CommandsGroup.Label" DefaultValue="Translator"/>
         <bt:String id="TaskpaneButton.Label" DefaultValue="Translation Helper"/>
+        <bt:String id="TaskpaneButton.SupertipTitle" DefaultValue="Translation Helper"/>
       </bt:ShortStrings>
       <bt:LongStrings>
-        <bt:String id="TaskpaneButton.Tooltip" DefaultValue="Open the translation formatting helper."/>
+        <bt:String id="TaskpaneButton.SupertipText" DefaultValue="Open the translation formatting helper."/>
       </bt:LongStrings>
     </Resources>
-
   </VersionOverrides>
-
 </OfficeApp>
