@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>번역 도우미</title>
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; font-size: 13px; background: #fff; color: #1f1f1f; padding: 12px; }
+
+    .format-tag { display: flex; align-items: center; gap: 5px; font-size: 11px; color: #4472C4; background: rgba(68,114,196,0.08); border: 0.5px solid #4472C4; border-radius: 20px; padding: 3px 9px; margin-bottom: 12px; width: fit-content; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: #4472C4; }
+
+    .seg { display: flex; border: 1px solid #d0d0d0; border-radius: 6px; overflow: hidden; margin-bottom: 12px; }
+    .seg-btn { flex: 1; padding: 6px 0; font-size: 12px; font-weight: 600; cursor: pointer; border: none; background: #fff; color: #666; transition: all 0.15s; }
+    .seg-btn.active { background: #4472C4; color: #fff; }
+    .seg-btn:not(:last-child) { border-right: 1px solid #d0d0d0; }
+
+    .lbl { font-size: 11px; font-weight: 600; color: #555; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; display: flex; align-items: center; gap: 5px; }
+    .badge { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 10px; background: rgba(68,114,196,0.12); color: #4472C4; text-transform: none; letter-spacing: 0; }
+    .field { margin-bottom: 10px; }
+    input[type=text], textarea { width: 100%; font-family: 'Segoe UI', sans-serif; font-size: 12px; border: 1px solid #d0d0d0; border-radius: 5px; padding: 6px 8px; line-height: 1.5; resize: vertical; color: #1f1f1f; }
+    input[type=text]:focus, textarea:focus { outline: none; border-color: #4472C4; }
+    textarea { min-height: 70px; }
+
+    .dir-row { display: flex; gap: 6px; margin-bottom: 10px; }
+    .dir-btn { flex: 1; padding: 6px 0; font-size: 11px; font-weight: 600; border-radius: 5px; cursor: pointer; border: 1px solid #d0d0d0; background: #fff; color: #666; transition: all 0.15s; }
+    .dir-btn.active { background: #1f1f1f; color: #fff; border-color: #1f1f1f; }
+
+    .btn-primary { width: 100%; padding: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border-radius: 6px; background: #4472C4; color: #fff; border: none; margin-bottom: 8px; transition: opacity 0.15s; }
+    .btn-primary:hover { opacity: 0.88; }
+    .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-secondary { width: 100%; padding: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border-radius: 6px; background: #1f1f1f; color: #fff; border: none; margin-bottom: 8px; transition: opacity 0.15s; }
+    .btn-secondary:hover { opacity: 0.85; }
+    .btn-secondary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .status { font-size: 11px; color: #888; text-align: center; padding: 4px 0 8px; }
+    .status.success { color: #107c10; }
+    .status.error { color: #c00; }
+
+    .output-box { border: 1px solid #d0d0d0; border-radius: 6px; margin-bottom: 8px; }
+    .output-head { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; border-bottom: 1px solid #e8e8e8; background: #f7f7f7; border-radius: 6px 6px 0 0; }
+    .output-head-lbl { font-size: 11px; font-weight: 600; color: #555; text-transform: uppercase; letter-spacing: 0.03em; }
+    .copy-btn { font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 4px; border: 1px solid #d0d0d0; background: #fff; color: #555; cursor: pointer; }
+    .copy-btn.copied { color: #107c10; border-color: #107c10; }
+    .output-body { padding: 10px; font-size: 12px; line-height: 1.8; white-space: pre-wrap; word-break: break-word; min-height: 50px; }
+    .placeholder { color: #aaa; font-style: italic; }
+
+    .ai-hint { font-size: 11px; color: #666; padding: 6px 8px; background: rgba(68,114,196,0.06); border-left: 2px solid #4472C4; border-radius: 3px; margin-bottom: 8px; line-height: 1.5; }
+    .edit-hint { font-size: 11px; color: #aaa; margin-top: 4px; }
+
+    #panel-dir { display: none; }
+    #panel-ai { display: none; }
+    #ai-result-field { display: none; }
+    #status-msg { display: none; }
+    #subject-tr-wrap { display: none; }
+  </style>
+</head>
+<body>
+
+<div class="format-tag">
+  <span class="dot"></span>
+  맑은 고딕 11pt · #4472C4
+</div>
+
+<div class="seg">
+  <button class="seg-btn active" id="mode-manual" onclick="setMode('manual')">직접 번역</button>
+  <button class="seg-btn" id="mode-ai" onclick="setMode('ai')">AI 초벌 번역</button>
+</div>
+
+<div id="panel-dir">
+  <div class="lbl" style="margin-bottom:4px;">번역 방향</div>
+  <div class="dir-row" style="margin-bottom:10px;">
+    <button class="dir-btn active" id="btn-ko-en" onclick="setDir('ko-en')">한국어 → EN</button>
+    <button class="dir-btn" id="btn-en-ko" onclick="setDir('en-ko')">EN → 한국어</button>
+  </div>
+</div>
+
+<div class="field">
+  <div class="lbl">메일 제목 <span class="badge">원문</span></div>
+  <input type="text" id="subject" placeholder="제목 자동 입력됨" />
+</div>
+
+<div class="field" id="subject-tr-wrap">
+  <div class="lbl">번역된 제목</div>
+  <input type="text" id="subject-translated" placeholder="번역된 제목" />
+</div>
+
+<div id="panel-manual">
+  <div class="field">
+    <div class="lbl">번역문 본문</div>
+    <textarea id="body-tr-manual" placeholder="번역된 본문을 붙여넣으세요."></textarea>
+  </div>
+  <div class="field">
+    <div class="lbl">원문 본문 <span class="badge">자동 입력</span></div>
+    <textarea id="body-orig-manual" placeholder="원문 본문 (자동 입력됨)"></textarea>
+  </div>
+</div>
+
+<div id="panel-ai">
+  <div class="field">
+    <div class="lbl">원문 본문 <span class="badge">자동 입력</span></div>
+    <div class="ai-hint">원문이 자동으로 들어와요. Claude가 초벌 번역 후 수정할 수 있어요.</div>
+    <textarea id="body-orig-ai" placeholder="원문 본문 (자동 입력됨)"></textarea>
+  </div>
+  <button class="btn-primary" id="ai-btn" onclick="runAI()">Claude 초벌 번역 ↗</button>
+  <div id="ai-result-field">
+    <div class="field">
+      <div class="lbl">초벌 번역 결과 <span class="badge">수정 가능</span></div>
+      <textarea id="body-tr-ai" style="min-height:80px;"></textarea>
+      <div class="edit-hint">수정 후 아래 버튼을 누르세요.</div>
+    </div>
+  </div>
+</div>
+
+<div id="status-msg" class="status"></div>
+
+<div class="output-box">
+  <div class="output-head">
+    <span class="output-head-lbl">미리보기</span>
+    <button class="copy-btn" id="copy-btn" onclick="copyOutput()">서식 복사</button>
+  </div>
+  <div class="output-body" id="output-area">
+    <span class="placeholder">포맷 생성 후 여기에 나타납니다.</span>
+  </div>
+</div>
+
+<button class="btn-secondary" id="insert-btn" onclick="buildAndInsert()" style="display:none;">회신에 삽입</button>
+<button class="btn-primary" onclick="buildOutput()">포맷 생성 + 서식 복사</button>
+
+<script>
+let mode = 'manual';
+let direction = 'ko-en';
+let htmlForClipboard = '';
+let plainForClipboard = '';
+let isComposeMode = false;
+
+Office.onReady(function(info) {
+  if (info.host === Office.HostType.Outlook) {
+    const item = Office.context.mailbox.item;
+    isComposeMode = typeof item.subject !== 'string';
+
+    if (isComposeMode) {
+      document.getElementById('insert-btn').style.display = 'block';
+      item.subject.getAsync(function(r) {
+        if (r.status === Office.AsyncResultStatus.Succeeded) {
+          document.getElementById('subject').value = r.value || '';
+        }
+      });
+      item.body.getAsync(Office.CoercionType.Text, function(r) {
+        if (r.status === Office.AsyncResultStatus.Succeeded) {
+          const cleaned = stripRequestLine(r.value || '');
+          document.getElementById('body-orig-manual').value = cleaned;
+          document.getElementById('body-orig-ai').value = cleaned;
+        }
+      });
+    } else {
+      document.getElementById('subject').value = item.subject || '';
+      item.body.getAsync(Office.CoercionType.Text, function(r) {
+        if (r.status === Office.AsyncResultStatus.Succeeded) {
+          const cleaned = stripRequestLine(r.value || '');
+          document.getElementById('body-orig-manual').value = cleaned;
+          document.getElementById('body-orig-ai').value = cleaned;
+        }
+      });
+    }
+  }
+});
+
+function stripRequestLine(text) {
+  return text
+    .split('\n')
+    .filter(line => !line.match(/번역\s*부탁드립니다|Please\s*translate/i))
+    .join('\n')
+    .trim();
+}
+
+function setMode(m) {
+  mode = m;
+  document.getElementById('mode-manual').classList.toggle('active', m === 'manual');
+  document.getElementById('mode-ai').classList.toggle('active', m === 'ai');
+  document.getElementById('panel-manual').style.display = m === 'manual' ? '' : 'none';
+  document.getElementById('panel-ai').style.display = m === 'ai' ? '' : 'none';
+  document.getElementById('panel-dir').style.display = m === 'ai' ? '' : 'none';
+  document.getElementById('subject-tr-wrap').style.display = m === 'manual' ? '' : 'none';
+}
+
+function setDir(d) {
+  direction = d;
+  document.getElementById('btn-ko-en').classList.toggle('active', d === 'ko-en');
+  document.getElementById('btn-en-ko').classList.toggle('active', d === 'en-ko');
+}
+
+async function runAI() {
+  const subject = document.getElementById('subject').value.trim();
+  const body = document.getElementById('body-orig-ai').value.trim();
+  if (!body) { showStatus('원문 본문을 입력해주세요.', 'error'); return; }
+
+  const btn = document.getElementById('ai-btn');
+  btn.disabled = true;
+  btn.textContent = '번역 중...';
+  showStatus('Claude가 초벌 번역 중입니다...');
+
+  const srcLang = direction === 'ko-en' ? '한국어' : '영어';
+  const tgtLang = direction === 'ko-en' ? '영어' : '한국어';
+
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        system: `You are a professional in-house translator. Translate from ${srcLang} to ${tgtLang} accurately and naturally. Return ONLY a JSON object with no markdown: {"translatedSubject":"...","translatedBody":"..."}`,
+        messages: [{ role: 'user', content: `Subject: ${subject || '(없음)'}\n\nBody:\n${body}` }]
+      })
+    });
+    const data = await resp.json();
+    const raw = data.content.map(b => b.text || '').join('');
+    const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim());
+    if (parsed.translatedSubject) {
+      document.getElementById('subject-translated').value = parsed.translatedSubject;
+      document.getElementById('subject-tr-wrap').style.display = '';
+    }
+    document.getElementById('body-tr-ai').value = parsed.translatedBody || '';
+    document.getElementById('ai-result-field').style.display = '';
+    showStatus('번역 완료! 수정 후 포맷 생성하세요.', 'success');
+  } catch(e) {
+    showStatus('오류: ' + e.message, 'error');
+  }
+  btn.disabled = false;
+  btn.textContent = 'Claude 초벌 번역 ↗';
+}
+
+function showStatus(msg, type) {
+  const el = document.getElementById('status-msg');
+  el.textContent = msg;
+  el.className = 'status' + (type ? ' ' + type : '');
+  el.style.display = 'block';
+  if (type === 'success') setTimeout(() => el.style.display = 'none', 3000);
+}
+
+function escHtml(s) {
+  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+}
+
+function getValues() {
+  const subject = document.getElementById('subject').value.trim();
+  const subjectTr = document.getElementById('subject-translated').value.trim();
+  const bodyTr = mode === 'manual'
+    ? document.getElementById('body-tr-manual').value.trim()
+    : document.getElementById('body-tr-ai').value.trim();
+  const bodyOrig = mode === 'manual'
+    ? document.getElementById('body-orig-manual').value.trim()
+    : document.getElementById('body-orig-ai').value.trim();
+  return { subject, subjectTr, bodyTr, bodyOrig };
+}
+
+function buildHtml(subject, subjectTr, bodyTr, bodyOrig) {
+  const subjectLine = subjectTr || subject || '';
+  const mg = `font-family:'Malgun Gothic','맑은 고딕',sans-serif;font-size:11pt;color:#4472C4;`;
+  const mgb = mg + `font-weight:bold;`;
+  return `<p style="${mg}margin:0;">[번역/Translated] ${escHtml(subjectLine)}</p>`
+    + `<p style="${mg}margin:0;">번역문이 추가되었습니다.</p>`
+    + `<p style="${mg}margin:0;">Translation has been added.</p>`
+    + `<p style="margin:0;">&nbsp;</p>`
+    + `<p style="${mgb}margin:0;">[번역문 / Translation]</p>`
+    + `<p style="margin:0;">${escHtml(bodyTr)}</p>`
+    + `<p style="margin:0;">---</p>`
+    + `<p style="${mgb}margin:0;">[원문 / Original]</p>`
+    + `<p style="margin:0;">${escHtml(bodyOrig)}</p>`;
+}
+
+function buildOutput() {
+  const { subject, subjectTr, bodyTr, bodyOrig } = getValues();
+  if (!bodyTr && !bodyOrig) { showStatus('본문 내용을 입력해주세요.', 'error'); return; }
+
+  const subjectLine = subjectTr || subject || '';
+  const mg2 = `font-family:'Malgun Gothic',sans-serif;font-size:12px;color:#4472C4;`;
+  const mg2b = mg2 + `font-weight:bold;`;
+  document.getElementById('output-area').innerHTML =
+    `<span style="${mg2}">[번역/Translated] ${escHtml(subjectLine)}</span>\n`
+    + `<span style="${mg2}">번역문이 추가되었습니다.</span>\n`
+    + `<span style="${mg2}">Translation has been added.</span>\n\n`
+    + `<span style="${mg2b}">[번역문 / Translation]</span>\n${escHtml(bodyTr)}\n`
+    + `<span style="color:#aaa;">---</span>\n`
+    + `<span style="${mg2b}">[원문 / Original]</span>\n${escHtml(bodyOrig)}`;
+
+  htmlForClipboard = buildHtml(subject, subjectTr, bodyTr, bodyOrig);
+  plainForClipboard = `[번역/Translated] ${subjectLine}\n번역문이 추가되었습니다.\nTranslation has been added.\n\n[번역문 / Translation]\n${bodyTr}\n---\n[원문 / Original]\n${bodyOrig}`;
+
+  copyOutput();
+}
+
+async function copyOutput() {
+  if (!htmlForClipboard) return;
+  try {
+    await navigator.clipboard.write([new ClipboardItem({
+      'text/html': new Blob([htmlForClipboard], { type: 'text/html' }),
+      'text/plain': new Blob([plainForClipboard], { type: 'text/plain' })
+    })]);
+    const btn = document.getElementById('copy-btn');
+    btn.textContent = '복사됨!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = '서식 복사'; btn.classList.remove('copied'); }, 2000);
+  } catch(e) {
+    showStatus('복사 실패: ' + e.message, 'error');
+  }
+}
+
+function buildAndInsert() {
+  const { subject, subjectTr, bodyTr, bodyOrig } = getValues();
+  if (!bodyTr && !bodyOrig) { showStatus('본문 내용을 입력해주세요.', 'error'); return; }
+
+  const html = buildHtml(subject, subjectTr, bodyTr, bodyOrig) + '<br>';
+
+  Office.context.mailbox.item.body.prependAsync(html, { coercionType: Office.CoercionType.Html }, function(r) {
+    if (r.status === Office.AsyncResultStatus.Succeeded) {
+      showStatus('회신에 삽입 완료!', 'success');
+    } else {
+      showStatus('삽입 실패: ' + r.error.message, 'error');
+    }
+  });
+}
+</script>
+</body>
+</html>
