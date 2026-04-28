@@ -126,6 +126,12 @@ let mode = 'manual';
 let direction = 'ko-en';
 let isComposeMode = false;
 
+// 마커: 이전 삽입 결과를 식별하고 제거하기 위함
+const HEADER_START = '<!--TH-HEADER-START-->';
+const HEADER_END = '<!--TH-HEADER-END-->';
+const FOOTER_START = '<!--TH-FOOTER-START-->';
+const FOOTER_END = '<!--TH-FOOTER-END-->';
+
 function show(id) { document.getElementById(id).classList.remove('hidden'); }
 function hide(id) { document.getElementById(id).classList.add('hidden'); }
 
@@ -259,9 +265,6 @@ async function runAI() {
     });
 
     const responseText = await resp.text();
-    console.log('API status:', resp.status);
-    console.log('API response:', responseText.substring(0, 500));
-
     if (!resp.ok) {
       let errMsg = `HTTP ${resp.status}`;
       try {
@@ -308,6 +311,10 @@ function escHtml(s) {
   return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
 }
 
+function escapeRegex(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function getValues() {
   const subject = document.getElementById('subject').value.trim();
   const subjectTr = document.getElementById('subject-translated').value.trim();
@@ -318,6 +325,26 @@ function getValues() {
     ? document.getElementById('body-orig-manual').value.trim()
     : document.getElementById('body-orig-ai').value.trim();
   return { subject, subjectTr, bodyTr, bodyOrig };
+}
+
+// 이전에 삽입된 헤더/푸터 (마커 사이) 또는 마커 없는 옛날 결과를 모두 제거
+function cleanPriorInsertions(html) {
+  // 마커 기반 제거
+  const headerRegex = new RegExp(escapeRegex(HEADER_START) + '[\\s\\S]*?' + escapeRegex(HEADER_END), 'g');
+  const footerRegex = new RegExp(escapeRegex(FOOTER_START) + '[\\s\\S]*?' + escapeRegex(FOOTER_END), 'g');
+  let cleaned = html.replace(headerRegex, '').replace(footerRegex, '');
+
+  // 마커가 없는 옛날 결과 (이전 코드 버전)도 제거 시도
+  // [번역/Translated] 로 시작하는 div 3개 제거
+  cleaned = cleaned.replace(
+    /<div[^>]*>\s*\[번역\/Translated\][^<]*<\/div>\s*<div[^>]*>\s*번역문이 추가되었습니다\.?\s*<\/div>\s*<div[^>]*>\s*Translation has been added\.?\s*<\/div>\s*(<div[^>]*>\s*&nbsp;\s*<\/div>\s*)?/gi, ''
+  );
+  // [번역문 / Translation] 부터 [원문 / Original] 다음 div 까지 제거
+  cleaned = cleaned.replace(
+    /(<div[^>]*>\s*&nbsp;\s*<\/div>\s*)?<div[^>]*>\s*\[번역문\s*\/\s*Translation\][^<]*<\/div>[\s\S]*?<div[^>]*>\s*\[원문\s*\/\s*Original\][^<]*<\/div>\s*<div[^>]*>[\s\S]*?<\/div>/gi, ''
+  );
+
+  return cleaned;
 }
 
 function buildAndInsert() {
@@ -332,13 +359,14 @@ function buildAndInsert() {
   const mg = `font-family:'Malgun Gothic','맑은 고딕',sans-serif;font-size:11pt;color:#4472C4;`;
   const mgb = mg + `font-weight:bold;`;
 
-  const topHeader =
+  const topHeader = HEADER_START +
     `<div style="${mg}">[번역/Translated] ${escHtml(subjectLine)}</div>` +
     `<div style="${mg}">번역문이 추가되었습니다.</div>` +
     `<div style="${mg}">Translation has been added.</div>` +
-    `<div>&nbsp;</div>`;
+    `<div>&nbsp;</div>` +
+    HEADER_END;
 
-  const bottomSection =
+  const bottomSection = FOOTER_START +
     `<div>&nbsp;</div>` +
     `<div style="${mgb}">[번역문 / Translation]</div>` +
     `<div>${escHtml(bodyTr)}</div>` +
@@ -346,7 +374,8 @@ function buildAndInsert() {
     `<div>---</div>` +
     `<div>&nbsp;</div>` +
     `<div style="${mgb}">[원문 / Original]</div>` +
-    `<div>${escHtml(bodyOrig)}</div>`;
+    `<div>${escHtml(bodyOrig)}</div>` +
+    FOOTER_END;
 
   showStatus('삽입 중...');
 
@@ -355,9 +384,12 @@ function buildAndInsert() {
       showStatus('본문 가져오기 실패: ' + (rGet.error?.message || ''), 'error');
       return;
     }
-    const currentBody = rGet.value || '';
-    let newBody;
+    let currentBody = rGet.value || '';
 
+    // 이전 삽입 결과 제거
+    currentBody = cleanPriorInsertions(currentBody);
+
+    let newBody;
     if (/<body[^>]*>/i.test(currentBody)) {
       newBody = currentBody
         .replace(/(<body[^>]*>)/i, '$1' + topHeader)
