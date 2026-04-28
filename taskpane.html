@@ -12,6 +12,16 @@
     .format-tag { display: flex; align-items: center; gap: 5px; font-size: 11px; color: #4472C4; background: rgba(68,114,196,0.08); border: 0.5px solid #4472C4; border-radius: 20px; padding: 3px 9px; margin-bottom: 12px; width: fit-content; }
     .dot { width: 7px; height: 7px; border-radius: 50%; background: #4472C4; }
 
+    .settings-toggle { font-size: 11px; color: #888; cursor: pointer; text-decoration: underline; margin-bottom: 10px; display: block; }
+    .settings-panel { background: #f7f7f7; border: 1px solid #e0e0e0; border-radius: 6px; padding: 10px; margin-bottom: 12px; display: none; }
+    .settings-panel.open { display: block; }
+    .api-row { display: flex; gap: 6px; align-items: center; }
+    .api-row input { flex: 1; font-size: 11px; padding: 5px 8px; border: 1px solid #d0d0d0; border-radius: 5px; color: #1f1f1f; font-family: 'Segoe UI', sans-serif; }
+    .api-save-btn { font-size: 11px; font-weight: 600; padding: 5px 10px; border-radius: 5px; border: none; background: #4472C4; color: #fff; cursor: pointer; white-space: nowrap; }
+    .api-key-status { font-size: 10px; margin-top: 5px; }
+    .api-key-status.ok { color: #107c10; }
+    .api-key-status.none { color: #c00; }
+
     .seg { display: flex; border: 1px solid #d0d0d0; border-radius: 6px; overflow: hidden; margin-bottom: 12px; }
     .seg-btn { flex: 1; padding: 6px 0; font-size: 12px; font-weight: 600; cursor: pointer; border: none; background: #fff; color: #666; transition: all 0.15s; }
     .seg-btn.active { background: #4472C4; color: #fff; }
@@ -46,10 +56,10 @@
     .copy-btn.copied { color: #107c10; border-color: #107c10; }
     .output-body { padding: 10px; font-size: 12px; line-height: 1.8; white-space: pre-wrap; word-break: break-word; min-height: 50px; }
     .placeholder { color: #aaa; font-style: italic; }
-
     .ai-hint { font-size: 11px; color: #666; padding: 6px 8px; background: rgba(68,114,196,0.06); border-left: 2px solid #4472C4; border-radius: 3px; margin-bottom: 8px; line-height: 1.5; }
     .edit-hint { font-size: 11px; color: #aaa; margin-top: 4px; }
 
+    #rich-copy-target { position: fixed; left: 0; top: 0; opacity: 0.01; pointer-events: none; min-width: 1px; min-height: 1px; }
     #panel-dir { display: none; }
     #panel-ai { display: none; }
     #ai-result-field { display: none; }
@@ -59,9 +69,16 @@
 </head>
 <body>
 
-<div class="format-tag">
-  <span class="dot"></span>
-  맑은 고딕 11pt · #4472C4
+<div class="format-tag"><span class="dot"></span>맑은 고딕 11pt · #4472C4</div>
+
+<span class="settings-toggle" onclick="toggleSettings()">⚙ API 키 설정</span>
+<div class="settings-panel" id="settings-panel">
+  <div class="lbl" style="margin-bottom:6px;">Anthropic API 키 <span class="badge">이 기기에만 저장</span></div>
+  <div class="api-row">
+    <input type="password" id="api-key-input" placeholder="sk-ant-..." />
+    <button class="api-save-btn" onclick="saveApiKey()">저장</button>
+  </div>
+  <div class="api-key-status" id="api-key-status"></div>
 </div>
 
 <div class="seg">
@@ -129,51 +146,80 @@
 <button class="btn-secondary" id="insert-btn" onclick="buildAndInsert()" style="display:none;">회신에 삽입</button>
 <button class="btn-primary" onclick="buildOutput()">포맷 생성 + 서식 복사</button>
 
+<div id="rich-copy-target" contenteditable="true"></div>
+
 <script>
 let mode = 'manual';
 let direction = 'ko-en';
 let htmlForClipboard = '';
-let plainForClipboard = '';
 let isComposeMode = false;
 
+function loadApiKey() {
+  try {
+    const key = localStorage.getItem('anthropic_api_key') || '';
+    const statusEl = document.getElementById('api-key-status');
+    if (key) {
+      document.getElementById('api-key-input').value = key;
+      statusEl.textContent = '키 저장됨 ✓';
+      statusEl.className = 'api-key-status ok';
+    } else {
+      statusEl.textContent = 'API 키가 없습니다. AI 번역을 사용하려면 입력해주세요.';
+      statusEl.className = 'api-key-status none';
+    }
+  } catch(e) {}
+}
+
+function saveApiKey() {
+  const key = document.getElementById('api-key-input').value.trim();
+  const statusEl = document.getElementById('api-key-status');
+  try {
+    if (key) {
+      localStorage.setItem('anthropic_api_key', key);
+      statusEl.textContent = '저장됐습니다! ✓';
+      statusEl.className = 'api-key-status ok';
+    } else {
+      localStorage.removeItem('anthropic_api_key');
+      statusEl.textContent = '키가 삭제됐습니다.';
+      statusEl.className = 'api-key-status none';
+    }
+  } catch(e) {
+    statusEl.textContent = '저장 실패: ' + e.message;
+    statusEl.className = 'api-key-status none';
+  }
+}
+
+function toggleSettings() {
+  document.getElementById('settings-panel').classList.toggle('open');
+}
+
 Office.onReady(function(info) {
+  loadApiKey();
   if (info.host === Office.HostType.Outlook) {
     const item = Office.context.mailbox.item;
     isComposeMode = typeof item.subject !== 'string';
-
     if (isComposeMode) {
       document.getElementById('insert-btn').style.display = 'block';
       item.subject.getAsync(function(r) {
-        if (r.status === Office.AsyncResultStatus.Succeeded) {
+        if (r.status === Office.AsyncResultStatus.Succeeded)
           document.getElementById('subject').value = r.value || '';
-        }
-      });
-      item.body.getAsync(Office.CoercionType.Text, function(r) {
-        if (r.status === Office.AsyncResultStatus.Succeeded) {
-          const cleaned = stripRequestLine(r.value || '');
-          document.getElementById('body-orig-manual').value = cleaned;
-          document.getElementById('body-orig-ai').value = cleaned;
-        }
       });
     } else {
       document.getElementById('subject').value = item.subject || '';
-      item.body.getAsync(Office.CoercionType.Text, function(r) {
-        if (r.status === Office.AsyncResultStatus.Succeeded) {
-          const cleaned = stripRequestLine(r.value || '');
-          document.getElementById('body-orig-manual').value = cleaned;
-          document.getElementById('body-orig-ai').value = cleaned;
-        }
-      });
     }
+    item.body.getAsync(Office.CoercionType.Text, function(r) {
+      if (r.status === Office.AsyncResultStatus.Succeeded) {
+        const cleaned = stripRequestLine(r.value || '');
+        document.getElementById('body-orig-manual').value = cleaned;
+        document.getElementById('body-orig-ai').value = cleaned;
+      }
+    });
   }
 });
 
 function stripRequestLine(text) {
-  return text
-    .split('\n')
+  return text.split('\n')
     .filter(line => !line.match(/번역\s*부탁드립니다|Please\s*translate/i))
-    .join('\n')
-    .trim();
+    .join('\n').trim();
 }
 
 function setMode(m) {
@@ -193,6 +239,12 @@ function setDir(d) {
 }
 
 async function runAI() {
+  const apiKey = localStorage.getItem('anthropic_api_key') || '';
+  if (!apiKey) {
+    showStatus('API 키가 없어요. 상단 ⚙ API 키 설정을 눌러 입력해주세요.', 'error');
+    document.getElementById('settings-panel').classList.add('open');
+    return;
+  }
   const subject = document.getElementById('subject').value.trim();
   const body = document.getElementById('body-orig-ai').value.trim();
   if (!body) { showStatus('원문 본문을 입력해주세요.', 'error'); return; }
@@ -208,7 +260,12 @@ async function runAI() {
   try {
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-allow-browser': 'true'
+      },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 1000,
@@ -217,6 +274,7 @@ async function runAI() {
       })
     });
     const data = await resp.json();
+    if (data.error) throw new Error(data.error.message);
     const raw = data.content.map(b => b.text || '').join('');
     const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim());
     if (parsed.translatedSubject) {
@@ -288,33 +346,38 @@ function buildOutput() {
     + `<span style="${mg2b}">[원문 / Original]</span>\n${escHtml(bodyOrig)}`;
 
   htmlForClipboard = buildHtml(subject, subjectTr, bodyTr, bodyOrig);
-  plainForClipboard = `[번역/Translated] ${subjectLine}\n번역문이 추가되었습니다.\nTranslation has been added.\n\n[번역문 / Translation]\n${bodyTr}\n---\n[원문 / Original]\n${bodyOrig}`;
-
   copyOutput();
 }
 
-async function copyOutput() {
+function copyOutput() {
   if (!htmlForClipboard) return;
-  try {
-    await navigator.clipboard.write([new ClipboardItem({
-      'text/html': new Blob([htmlForClipboard], { type: 'text/html' }),
-      'text/plain': new Blob([plainForClipboard], { type: 'text/plain' })
-    })]);
-    const btn = document.getElementById('copy-btn');
+  const el = document.getElementById('rich-copy-target');
+  el.innerHTML = htmlForClipboard;
+
+  const range = document.createRange();
+  range.selectNodeContents(el);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+
+  let success = false;
+  try { success = document.execCommand('copy'); } catch(e) {}
+  sel.removeAllRanges();
+
+  const btn = document.getElementById('copy-btn');
+  if (success) {
     btn.textContent = '복사됨!';
     btn.classList.add('copied');
     setTimeout(() => { btn.textContent = '서식 복사'; btn.classList.remove('copied'); }, 2000);
-  } catch(e) {
-    showStatus('복사 실패: ' + e.message, 'error');
+  } else {
+    showStatus('복사 실패 — 회신에 삽입 버튼을 이용해주세요.', 'error');
   }
 }
 
 function buildAndInsert() {
   const { subject, subjectTr, bodyTr, bodyOrig } = getValues();
   if (!bodyTr && !bodyOrig) { showStatus('본문 내용을 입력해주세요.', 'error'); return; }
-
   const html = buildHtml(subject, subjectTr, bodyTr, bodyOrig) + '<br>';
-
   Office.context.mailbox.item.body.prependAsync(html, { coercionType: Office.CoercionType.Html }, function(r) {
     if (r.status === Office.AsyncResultStatus.Succeeded) {
       showStatus('회신에 삽입 완료!', 'success');
