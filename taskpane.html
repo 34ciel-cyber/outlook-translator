@@ -30,7 +30,7 @@
     .lbl { font-size: 11px; font-weight: 600; color: #555; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; display: flex; align-items: center; gap: 5px; }
     .badge { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 10px; background: rgba(68,114,196,0.12); color: #4472C4; text-transform: none; letter-spacing: 0; }
     .field { margin-bottom: 10px; }
-    input[type=text], textarea { width: 100%; font-family: 'Segoe UI', sans-serif; font-size: 12px; border: 1px solid #d0d0d0; border-radius: 5px; padding: 6px 8px; line-height: 1.5; resize: vertical; color: #1f1f1f; }
+    input[type=text], input[type=password], textarea { width: 100%; font-family: 'Segoe UI', sans-serif; font-size: 12px; border: 1px solid #d0d0d0; border-radius: 5px; padding: 6px 8px; line-height: 1.5; resize: vertical; color: #1f1f1f; }
     input[type=text]:focus, textarea:focus { outline: none; border-color: #4472C4; }
     textarea { min-height: 70px; }
 
@@ -45,21 +45,13 @@
     .btn-secondary:hover { opacity: 0.85; }
     .btn-secondary:disabled { opacity: 0.4; cursor: not-allowed; }
 
-    .status { font-size: 11px; color: #888; text-align: center; padding: 4px 0 8px; }
+    .status { font-size: 11px; color: #888; text-align: center; padding: 4px 0 8px; word-break: break-word; }
     .status.success { color: #107c10; }
-    .status.error { color: #c00; }
+    .status.error { color: #c00; padding: 6px 8px; background: #fef0f0; border-radius: 4px; border: 1px solid #f5c0c0; text-align: left; }
 
-    .output-box { border: 1px solid #d0d0d0; border-radius: 6px; margin-bottom: 8px; }
-    .output-head { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; border-bottom: 1px solid #e8e8e8; background: #f7f7f7; border-radius: 6px 6px 0 0; }
-    .output-head-lbl { font-size: 11px; font-weight: 600; color: #555; text-transform: uppercase; letter-spacing: 0.03em; }
-    .copy-btn { font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 4px; border: 1px solid #d0d0d0; background: #fff; color: #555; cursor: pointer; }
-    .copy-btn.copied { color: #107c10; border-color: #107c10; }
-    .output-body { padding: 10px; font-size: 12px; line-height: 1.8; white-space: pre-wrap; word-break: break-word; min-height: 50px; }
-    .placeholder { color: #aaa; font-style: italic; }
     .ai-hint { font-size: 11px; color: #666; padding: 6px 8px; background: rgba(68,114,196,0.06); border-left: 2px solid #4472C4; border-radius: 3px; margin-bottom: 8px; line-height: 1.5; }
     .edit-hint { font-size: 11px; color: #aaa; margin-top: 4px; }
 
-    #rich-copy-target { position: fixed; left: 0; top: 0; opacity: 0.01; pointer-events: none; min-width: 1px; min-height: 1px; }
     #panel-dir { display: none; }
     #panel-ai { display: none; }
     #ai-result-field { display: none; }
@@ -133,25 +125,11 @@
 
 <div id="status-msg" class="status"></div>
 
-<div class="output-box">
-  <div class="output-head">
-    <span class="output-head-lbl">미리보기</span>
-    <button class="copy-btn" id="copy-btn" onclick="copyOutput()">서식 복사</button>
-  </div>
-  <div class="output-body" id="output-area">
-    <span class="placeholder">포맷 생성 후 여기에 나타납니다.</span>
-  </div>
-</div>
-
 <button class="btn-secondary" id="insert-btn" onclick="buildAndInsert()" style="display:none;">회신에 삽입</button>
-<button class="btn-primary" onclick="buildOutput()">포맷 생성 + 서식 복사</button>
-
-<div id="rich-copy-target" contenteditable="true"></div>
 
 <script>
 let mode = 'manual';
 let direction = 'ko-en';
-let htmlForClipboard = '';
 let isComposeMode = false;
 
 function loadApiKey() {
@@ -201,10 +179,10 @@ Office.onReady(function(info) {
       document.getElementById('insert-btn').style.display = 'block';
       item.subject.getAsync(function(r) {
         if (r.status === Office.AsyncResultStatus.Succeeded)
-          document.getElementById('subject').value = r.value || '';
+          document.getElementById('subject').value = (r.value || '').replace(/^(RE:\s*|\[EXT\]\s*|Fw:\s*)+/gi, '').trim();
       });
     } else {
-      document.getElementById('subject').value = item.subject || '';
+      document.getElementById('subject').value = (item.subject || '').replace(/^(RE:\s*|\[EXT\]\s*|Fw:\s*)+/gi, '').trim();
     }
     item.body.getAsync(Office.CoercionType.Text, function(r) {
       if (r.status === Office.AsyncResultStatus.Succeeded) {
@@ -217,7 +195,17 @@ Office.onReady(function(info) {
 });
 
 function stripRequestLine(text) {
-  return text.split('\n')
+  // Remove the translation request line and quoted reply headers
+  const lines = text.split('\n');
+  let stopAt = lines.length;
+  // Find where the auto-quoted reply starts (보낸 사람: / From:)
+  for (let i = 0; i < lines.length; i++) {
+    if (/^(보낸 사람|보낸사람|From)\s*:/i.test(lines[i].trim())) {
+      stopAt = i;
+      break;
+    }
+  }
+  return lines.slice(0, stopAt)
     .filter(line => !line.match(/번역\s*부탁드립니다|Please\s*translate/i))
     .join('\n').trim();
 }
@@ -264,28 +252,49 @@ async function runAI() {
         'Content-Type': 'application/json',
         'x-api-key': apiKey,
         'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-allow-browser': 'true'
+        'anthropic-dangerous-direct-browser-access': 'true'
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1000,
-        system: `You are a professional in-house translator. Translate from ${srcLang} to ${tgtLang} accurately and naturally. Return ONLY a JSON object with no markdown: {"translatedSubject":"...","translatedBody":"..."}`,
-        messages: [{ role: 'user', content: `Subject: ${subject || '(없음)'}\n\nBody:\n${body}` }]
+        model: 'claude-haiku-4-5',
+        max_tokens: 2000,
+        system: `You are a professional in-house translator. Translate the email content from ${srcLang} to ${tgtLang} accurately and naturally, preserving tone and formality. Return ONLY a valid JSON object with no markdown formatting, no code fences, no explanation. Format: {"translatedSubject": "...", "translatedBody": "..."}`,
+        messages: [{ role: 'user', content: `Subject: ${subject || '(none)'}\n\nBody:\n${body}` }]
       })
     });
-    const data = await resp.json();
-    if (data.error) throw new Error(data.error.message);
+
+    const responseText = await resp.text();
+    console.log('API response:', resp.status, responseText);
+
+    if (!resp.ok) {
+      let errMsg = `HTTP ${resp.status}`;
+      try {
+        const errData = JSON.parse(responseText);
+        errMsg = errData.error?.message || errData.message || errMsg;
+      } catch(e) {}
+      throw new Error(errMsg);
+    }
+
+    const data = JSON.parse(responseText);
+    if (!data.content || !data.content.length) throw new Error('응답 형식 오류: content 없음');
+
     const raw = data.content.map(b => b.text || '').join('');
-    const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim());
+    let parsed;
+    try {
+      parsed = JSON.parse(raw.replace(/```json|```/g, '').trim());
+    } catch(e) {
+      throw new Error('번역 결과 파싱 실패: ' + raw.substring(0, 100));
+    }
+
     if (parsed.translatedSubject) {
       document.getElementById('subject-translated').value = parsed.translatedSubject;
       document.getElementById('subject-tr-wrap').style.display = '';
     }
     document.getElementById('body-tr-ai').value = parsed.translatedBody || '';
     document.getElementById('ai-result-field').style.display = '';
-    showStatus('번역 완료! 수정 후 포맷 생성하세요.', 'success');
+    showStatus('번역 완료! 수정 후 회신에 삽입을 누르세요.', 'success');
   } catch(e) {
-    showStatus('오류: ' + e.message, 'error');
+    showStatus('AI 번역 오류: ' + e.message, 'error');
+    console.error('Translation error:', e);
   }
   btn.disabled = false;
   btn.textContent = 'Claude 초벌 번역 ↗';
@@ -296,7 +305,7 @@ function showStatus(msg, type) {
   el.textContent = msg;
   el.className = 'status' + (type ? ' ' + type : '');
   el.style.display = 'block';
-  if (type === 'success') setTimeout(() => el.style.display = 'none', 3000);
+  if (type === 'success') setTimeout(() => el.style.display = 'none', 4000);
 }
 
 function escHtml(s) {
@@ -315,75 +324,63 @@ function getValues() {
   return { subject, subjectTr, bodyTr, bodyOrig };
 }
 
-function buildHtml(subject, subjectTr, bodyTr, bodyOrig) {
+function buildAndInsert() {
+  if (!isComposeMode) {
+    showStatus('회신 작성 화면에서만 사용할 수 있어요.', 'error');
+    return;
+  }
+  const { subject, subjectTr, bodyTr, bodyOrig } = getValues();
+  if (!bodyTr && !bodyOrig) { showStatus('본문 내용을 입력해주세요.', 'error'); return; }
+
   const subjectLine = subjectTr || subject || '';
   const mg = `font-family:'Malgun Gothic','맑은 고딕',sans-serif;font-size:11pt;color:#4472C4;`;
   const mgb = mg + `font-weight:bold;`;
-  return `<p style="${mg}margin:0;">[번역/Translated] ${escHtml(subjectLine)}</p>`
-    + `<p style="${mg}margin:0;">번역문이 추가되었습니다.</p>`
-    + `<p style="${mg}margin:0;">Translation has been added.</p>`
-    + `<p style="margin:0;">&nbsp;</p>`
-    + `<p style="${mgb}margin:0;">[번역문 / Translation]</p>`
-    + `<p style="margin:0;">${escHtml(bodyTr)}</p>`
-    + `<p style="margin:0;">---</p>`
-    + `<p style="${mgb}margin:0;">[원문 / Original]</p>`
-    + `<p style="margin:0;">${escHtml(bodyOrig)}</p>`;
-}
 
-function buildOutput() {
-  const { subject, subjectTr, bodyTr, bodyOrig } = getValues();
-  if (!bodyTr && !bodyOrig) { showStatus('본문 내용을 입력해주세요.', 'error'); return; }
+  // 상단 헤더 (회신 본문 맨 위에 들어감)
+  const topHeader =
+    `<div style="${mg}">[번역/Translated] ${escHtml(subjectLine)}</div>` +
+    `<div style="${mg}">번역문이 추가되었습니다.</div>` +
+    `<div style="${mg}">Translation has been added.</div>` +
+    `<div>&nbsp;</div>`;
 
-  const subjectLine = subjectTr || subject || '';
-  const mg2 = `font-family:'Malgun Gothic',sans-serif;font-size:12px;color:#4472C4;`;
-  const mg2b = mg2 + `font-weight:bold;`;
-  document.getElementById('output-area').innerHTML =
-    `<span style="${mg2}">[번역/Translated] ${escHtml(subjectLine)}</span>\n`
-    + `<span style="${mg2}">번역문이 추가되었습니다.</span>\n`
-    + `<span style="${mg2}">Translation has been added.</span>\n\n`
-    + `<span style="${mg2b}">[번역문 / Translation]</span>\n${escHtml(bodyTr)}\n`
-    + `<span style="color:#aaa;">---</span>\n`
-    + `<span style="${mg2b}">[원문 / Original]</span>\n${escHtml(bodyOrig)}`;
+  // 하단 섹션 (자동 인용된 원본 메일 아래에 들어감)
+  const bottomSection =
+    `<div>&nbsp;</div>` +
+    `<div style="${mgb}">[번역문 / Translation]</div>` +
+    `<div>${escHtml(bodyTr)}</div>` +
+    `<div>&nbsp;</div>` +
+    `<div>---</div>` +
+    `<div>&nbsp;</div>` +
+    `<div style="${mgb}">[원문 / Original]</div>` +
+    `<div>${escHtml(bodyOrig)}</div>`;
 
-  htmlForClipboard = buildHtml(subject, subjectTr, bodyTr, bodyOrig);
-  copyOutput();
-}
+  showStatus('삽입 중...');
 
-function copyOutput() {
-  if (!htmlForClipboard) return;
-  const el = document.getElementById('rich-copy-target');
-  el.innerHTML = htmlForClipboard;
-
-  const range = document.createRange();
-  range.selectNodeContents(el);
-  const sel = window.getSelection();
-  sel.removeAllRanges();
-  sel.addRange(range);
-
-  let success = false;
-  try { success = document.execCommand('copy'); } catch(e) {}
-  sel.removeAllRanges();
-
-  const btn = document.getElementById('copy-btn');
-  if (success) {
-    btn.textContent = '복사됨!';
-    btn.classList.add('copied');
-    setTimeout(() => { btn.textContent = '서식 복사'; btn.classList.remove('copied'); }, 2000);
-  } else {
-    showStatus('복사 실패 — 회신에 삽입 버튼을 이용해주세요.', 'error');
-  }
-}
-
-function buildAndInsert() {
-  const { subject, subjectTr, bodyTr, bodyOrig } = getValues();
-  if (!bodyTr && !bodyOrig) { showStatus('본문 내용을 입력해주세요.', 'error'); return; }
-  const html = buildHtml(subject, subjectTr, bodyTr, bodyOrig) + '<br>';
-  Office.context.mailbox.item.body.prependAsync(html, { coercionType: Office.CoercionType.Html }, function(r) {
-    if (r.status === Office.AsyncResultStatus.Succeeded) {
-      showStatus('회신에 삽입 완료!', 'success');
-    } else {
-      showStatus('삽입 실패: ' + r.error.message, 'error');
+  Office.context.mailbox.item.body.getAsync(Office.CoercionType.Html, function(rGet) {
+    if (rGet.status !== Office.AsyncResultStatus.Succeeded) {
+      showStatus('본문 가져오기 실패: ' + (rGet.error?.message || ''), 'error');
+      return;
     }
+    const currentBody = rGet.value || '';
+    let newBody;
+
+    // <body> 태그가 있으면 그 안의 시작과 끝에 삽입
+    if (/<body[^>]*>/i.test(currentBody)) {
+      newBody = currentBody
+        .replace(/(<body[^>]*>)/i, '$1' + topHeader)
+        .replace(/(<\/body>)/i, bottomSection + '$1');
+    } else {
+      // <body> 태그가 없으면 그냥 앞뒤로 붙임
+      newBody = topHeader + currentBody + bottomSection;
+    }
+
+    Office.context.mailbox.item.body.setAsync(newBody, { coercionType: Office.CoercionType.Html }, function(rSet) {
+      if (rSet.status === Office.AsyncResultStatus.Succeeded) {
+        showStatus('회신에 삽입 완료!', 'success');
+      } else {
+        showStatus('삽입 실패: ' + (rSet.error?.message || ''), 'error');
+      }
+    });
   });
 }
 </script>
