@@ -12,6 +12,9 @@
     .format-tag { display: flex; align-items: center; gap: 5px; font-size: 11px; color: #4472C4; background: rgba(68,114,196,0.08); border: 0.5px solid #4472C4; border-radius: 20px; padding: 3px 9px; margin-bottom: 12px; width: fit-content; }
     .dot { width: 7px; height: 7px; border-radius: 50%; background: #4472C4; }
 
+    .mode-banner { font-size: 11px; padding: 6px 8px; border-radius: 5px; margin-bottom: 12px; border-left: 2px solid #4472C4; background: rgba(68,114,196,0.06); color: #444; line-height: 1.5; }
+    .mode-banner.compose { border-left-color: #888; background: #f7f7f7; color: #666; }
+
     .settings-toggle { font-size: 11px; color: #888; cursor: pointer; text-decoration: underline; margin-bottom: 10px; display: block; }
     .settings-panel { background: #f7f7f7; border: 1px solid #e0e0e0; border-radius: 6px; padding: 10px; margin-bottom: 12px; }
     .api-row { display: flex; gap: 6px; align-items: center; }
@@ -61,6 +64,13 @@
 <body>
 
 <div class="format-tag"><span class="dot"></span>맑은 고딕 11pt · #4472C4</div>
+
+<div id="mode-banner-read" class="mode-banner hidden">
+  <strong>읽기 모드</strong> · 받은 메일에서 번역 준비 후 <strong>회신 만들기</strong> 버튼을 누르면 포맷이 적용된 회신창이 자동으로 열려요.
+</div>
+<div id="mode-banner-compose" class="mode-banner compose hidden">
+  <strong>작성 모드</strong> · 가능하면 회신을 닫고 받은 메일 화면에서 시작하면 더 깔끔해요.
+</div>
 
 <span class="settings-toggle" onclick="toggleSettings()">⚙ API 키 설정</span>
 <div class="settings-panel hidden" id="settings-panel">
@@ -124,24 +134,24 @@
     <div class="field" style="margin-top:8px;">
       <div class="lbl">초벌 번역 결과 <span class="badge">수정 가능</span></div>
       <textarea id="body-tr-ai" style="min-height:80px;"></textarea>
-      <div class="edit-hint">수정 후 아래 회신에 삽입을 누르세요.</div>
+      <div class="edit-hint">수정 후 아래 버튼을 누르세요.</div>
     </div>
   </div>
 </div>
 
 <div id="status-msg" class="status hidden"></div>
 
-<button class="btn-secondary hidden" id="insert-btn" onclick="buildAndInsert()">회신에 삽입</button>
+<button class="btn-primary hidden" id="create-reply-btn" onclick="createFormattedReply()">📧 회신 만들기 (자동)</button>
+<button class="btn-secondary hidden" id="insert-btn" onclick="insertIntoCompose()">현재 회신창에 삽입</button>
 
 <script>
 let mode = 'manual';
 let direction = 'ko-en';
 let isComposeMode = false;
+let originalEmailMeta = null; // 읽기 모드에서 캐싱: 보낸 사람, 날짜 등
 
 const HEADER_START = '<!--TH-HEADER-START-->';
 const HEADER_END = '<!--TH-HEADER-END-->';
-const FOOTER_START = '<!--TH-FOOTER-START-->';
-const FOOTER_END = '<!--TH-FOOTER-END-->';
 
 function show(id) { document.getElementById(id).classList.remove('hidden'); }
 function hide(id) { document.getElementById(id).classList.add('hidden'); }
@@ -186,25 +196,53 @@ function toggleSettings() {
 
 Office.onReady(function(info) {
   loadApiKey();
-  if (info.host === Office.HostType.Outlook) {
-    const item = Office.context.mailbox.item;
-    isComposeMode = typeof item.subject !== 'string';
-    if (isComposeMode) {
-      show('insert-btn');
-      item.subject.getAsync(function(r) {
-        if (r.status === Office.AsyncResultStatus.Succeeded)
-          document.getElementById('subject').value = (r.value || '').replace(/^(RE:\s*|\[EXT\]\s*|Fw:\s*)+/gi, '').trim();
-      });
-    } else {
-      document.getElementById('subject').value = (item.subject || '').replace(/^(RE:\s*|\[EXT\]\s*|Fw:\s*)+/gi, '').trim();
-    }
+  if (info.host !== Office.HostType.Outlook) return;
+
+  const item = Office.context.mailbox.item;
+  isComposeMode = typeof item.subject !== 'string';
+
+  if (isComposeMode) {
+    show('mode-banner-compose');
+    show('insert-btn');
+    item.subject.getAsync(function(r) {
+      if (r.status === Office.AsyncResultStatus.Succeeded)
+        document.getElementById('subject').value = (r.value || '').replace(/^(RE:\s*|\[EXT\]\s*|Fw:\s*)+/gi, '').trim();
+    });
+    reloadSource();
+  } else {
+    show('mode-banner-read');
+    show('create-reply-btn');
+    // 메타 정보 캐싱
+    originalEmailMeta = {
+      subject: (item.subject || '').replace(/^(RE:\s*|\[EXT\]\s*|Fw:\s*)+/gi, '').trim(),
+      from: item.from ? `${item.from.displayName} <${item.from.emailAddress}>` : '',
+      to: (item.to || []).map(r => `${r.displayName} <${r.emailAddress}>`).join('; '),
+      cc: (item.cc || []).map(r => `${r.displayName} <${r.emailAddress}>`).join('; '),
+      sentDate: item.dateTimeCreated ? formatDate(item.dateTimeCreated) : '',
+      itemId: item.itemId
+    };
+    document.getElementById('subject').value = originalEmailMeta.subject;
     reloadSource();
   }
 });
 
+function formatDate(d) {
+  if (!d) return '';
+  const date = new Date(d);
+  const days = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
+  const yyyy = date.getFullYear();
+  const m = date.getMonth() + 1;
+  const dd = date.getDate();
+  const day = days[date.getDay()];
+  let h = date.getHours();
+  const min = date.getMinutes();
+  const ampm = h < 12 ? '오전' : '오후';
+  h = h % 12 || 12;
+  return `${yyyy}년 ${m}월 ${dd}일 ${day} ${ampm} ${h}:${String(min).padStart(2,'0')}`;
+}
+
 function setSrcBadge(label, success) {
-  const badges = ['src-badge-manual', 'src-badge-ai'];
-  badges.forEach(id => {
+  ['src-badge-manual', 'src-badge-ai'].forEach(id => {
     const el = document.getElementById(id);
     if (el) {
       el.textContent = label;
@@ -213,12 +251,10 @@ function setSrcBadge(label, success) {
   });
 }
 
-// 원문 다시 불러오기: 선택 텍스트 우선, 없으면 본문에서 최신 메일 추출
 function reloadSource() {
   if (!Office.context.mailbox.item) return;
   const item = Office.context.mailbox.item;
 
-  // 1. 선택된 텍스트 먼저 시도
   if (item.getSelectedDataAsync) {
     item.getSelectedDataAsync(Office.CoercionType.Text, function(rSel) {
       if (rSel.status === Office.AsyncResultStatus.Succeeded
@@ -229,15 +265,14 @@ function reloadSource() {
         setSrcBadge('선택한 부분', true);
         return;
       }
-      // 선택된 게 없으면 자동 추출
-      extractLatestMessage();
+      extractMessageBody();
     });
   } else {
-    extractLatestMessage();
+    extractMessageBody();
   }
 }
 
-function extractLatestMessage() {
+function extractMessageBody() {
   Office.context.mailbox.item.body.getAsync(Office.CoercionType.Text, function(r) {
     if (r.status !== Office.AsyncResultStatus.Succeeded) {
       setSrcBadge('자동 입력 실패', false);
@@ -247,17 +282,12 @@ function extractLatestMessage() {
     const extracted = extractMostRecentEmail(fullText);
     document.getElementById('body-orig-manual').value = extracted;
     document.getElementById('body-orig-ai').value = extracted;
-    setSrcBadge('가장 최근 메일', true);
+    setSrcBadge(isComposeMode ? '가장 최근 메일' : '메일 본문', true);
   });
 }
 
-// 본문에서 가장 최근 메일 추출
-// 회신 본문이 비어있다면 첫 번째 인용 메일을 가져옴
-// 회신 본문이 있다면 그 부분을 가져옴
 function extractMostRecentEmail(text) {
   const lines = text.split('\n');
-
-  // "보낸 사람:" / "From:" 위치 찾기
   let firstQuoteIdx = -1;
   for (let i = 0; i < lines.length; i++) {
     if (/^(보낸 사람|보낸사람|From)\s*:/i.test(lines[i].trim())) {
@@ -266,30 +296,23 @@ function extractMostRecentEmail(text) {
     }
   }
 
-  // 회신 본문 추출 (인용 시작 전까지)
+  // 회신 본문이 있으면 그 부분만
   let replyBody = '';
   if (firstQuoteIdx > 0) {
     replyBody = lines.slice(0, firstQuoteIdx)
       .filter(line => !line.match(/번역\s*부탁드립니다|Please\s*translate/i))
       .join('\n').trim();
   } else if (firstQuoteIdx === -1) {
-    // 인용 메일이 없으면 전체가 회신 본문
     return lines
       .filter(line => !line.match(/번역\s*부탁드립니다|Please\s*translate/i))
       .join('\n').trim();
   }
+  if (replyBody.length > 10) return replyBody;
 
-  // 회신 본문이 충분히 있으면 그것을 반환
-  if (replyBody.length > 10) {
-    return replyBody;
-  }
-
-  // 회신 본문이 비어있거나 너무 짧으면 → 첫 번째 인용 메일에서 본문 추출
-  // "보낸 사람:" 다음에 헤더들 (보낸 날짜, 받는 사람, 참조, 제목) 건너뛰고 본문 시작
+  // 첫 인용 메일에서 헤더 건너뛰고 본문만
   let bodyStart = firstQuoteIdx;
   for (let i = firstQuoteIdx; i < lines.length; i++) {
     const trimmed = lines[i].trim();
-    // 헤더 라인이 아니고, 빈 라인이 아니면 본문 시작
     if (!/^(보낸 사람|보낸사람|보낸 날짜|보낸날짜|받는 사람|받는사람|참조|숨은 참조|제목|From|Sent|To|Cc|Bcc|Subject)\s*:/i.test(trimmed)
         && trimmed.length > 0) {
       bodyStart = i;
@@ -297,7 +320,6 @@ function extractMostRecentEmail(text) {
     }
   }
 
-  // 다음 인용 메일 시작 (또 다른 "보낸 사람:") 찾기
   let bodyEnd = lines.length;
   for (let i = bodyStart + 1; i < lines.length; i++) {
     if (/^(보낸 사람|보낸사람|From)\s*:/i.test(lines[i].trim())) {
@@ -390,7 +412,7 @@ async function runAI() {
     }
     document.getElementById('body-tr-ai').value = parsed.translatedBody || '';
     show('ai-result-field');
-    showStatus('번역 완료! 수정 후 회신에 삽입을 누르세요.', 'success');
+    showStatus('번역 완료! 이제 회신 만들기 버튼을 누르세요.', 'success');
   } catch(e) {
     showStatus('AI 번역 오류: ' + e.message, 'error');
     console.error('Translation error:', e);
@@ -411,10 +433,6 @@ function escHtml(s) {
   return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
 }
 
-function escapeRegex(s) {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
 function getValues() {
   const subject = document.getElementById('subject').value.trim();
   const subjectTr = document.getElementById('subject-translated').value.trim();
@@ -427,22 +445,64 @@ function getValues() {
   return { subject, subjectTr, bodyTr, bodyOrig };
 }
 
-function cleanPriorInsertions(html) {
-  const headerRegex = new RegExp(escapeRegex(HEADER_START) + '[\\s\\S]*?' + escapeRegex(HEADER_END), 'g');
-  const footerRegex = new RegExp(escapeRegex(FOOTER_START) + '[\\s\\S]*?' + escapeRegex(FOOTER_END), 'g');
-  let cleaned = html.replace(headerRegex, '').replace(footerRegex, '');
+// 회신창 본문 전체 HTML 생성
+function buildReplyHtml(subject, subjectTr, bodyTr, bodyOrig, includeQuoteHeader) {
+  const subjectLine = subjectTr || subject || '';
+  const mg = `font-family:'Malgun Gothic','맑은 고딕',sans-serif;font-size:11pt;color:#4472C4;`;
+  const mgb = mg + `font-weight:bold;`;
+  const plain = `font-family:'Malgun Gothic','맑은 고딕',sans-serif;font-size:11pt;`;
 
-  cleaned = cleaned.replace(
-    /<div[^>]*>\s*\[번역\/Translated\][^<]*<\/div>\s*<div[^>]*>\s*번역문이 추가되었습니다\.?\s*<\/div>\s*<div[^>]*>\s*Translation has been added\.?\s*<\/div>\s*(<div[^>]*>\s*&nbsp;\s*<\/div>\s*)?/gi, ''
-  );
-  cleaned = cleaned.replace(
-    /(<div[^>]*>\s*&nbsp;\s*<\/div>\s*)?<div[^>]*>\s*\[번역문\s*\/\s*Translation\][^<]*<\/div>[\s\S]*?<div[^>]*>\s*\[원문\s*\/\s*Original\][^<]*<\/div>\s*<div[^>]*>[\s\S]*?<\/div>/gi, ''
-  );
+  // 상단 헤더: [번역/Translated] 제목 / 공백 / 번역문이 추가됐습니다 / Translation has been added.
+  let html = `<div style="${mg}">[번역/Translated] ${escHtml(subjectLine)}</div>`;
+  html += `<div style="${mg}">&nbsp;</div>`;
+  html += `<div style="${mg}">번역문이 추가되었습니다.</div>`;
+  html += `<div style="${mg}">Translation has been added.</div>`;
+  html += `<div>&nbsp;</div>`;
 
-  return cleaned;
+  // 인용 메일 헤더 (읽기 모드에서 회신 만들 때만)
+  if (includeQuoteHeader && originalEmailMeta) {
+    html += `<div style="border-top:1px solid #ccc;margin:10px 0;"></div>`;
+    if (originalEmailMeta.from) html += `<div style="${plain}"><b>보낸 사람:</b> ${escHtml(originalEmailMeta.from)}</div>`;
+    if (originalEmailMeta.sentDate) html += `<div style="${plain}"><b>보낸 날짜:</b> ${escHtml(originalEmailMeta.sentDate)}</div>`;
+    if (originalEmailMeta.to) html += `<div style="${plain}"><b>받는 사람:</b> ${escHtml(originalEmailMeta.to)}</div>`;
+    if (originalEmailMeta.cc) html += `<div style="${plain}"><b>참조:</b> ${escHtml(originalEmailMeta.cc)}</div>`;
+    if (originalEmailMeta.subject) html += `<div style="${plain}"><b>제목:</b> ${escHtml(originalEmailMeta.subject)}</div>`;
+    html += `<div>&nbsp;</div>`;
+  }
+
+  // 번역문/원문 섹션
+  html += `<div style="${mgb}">[번역문 / Translation]</div>`;
+  html += `<div>&nbsp;</div>`;
+  html += `<div style="${plain}">${escHtml(bodyTr)}</div>`;
+  html += `<div>&nbsp;</div>`;
+  html += `<div style="${plain}">---</div>`;
+  html += `<div>&nbsp;</div>`;
+  html += `<div style="${mgb}">[원문 / Original]</div>`;
+  html += `<div>&nbsp;</div>`;
+  html += `<div style="${plain}">${escHtml(bodyOrig)}</div>`;
+
+  return html;
 }
 
-function buildAndInsert() {
+// 읽기 모드: 새 회신 만들기
+function createFormattedReply() {
+  const { subject, subjectTr, bodyTr, bodyOrig } = getValues();
+  if (!bodyTr && !bodyOrig) { showStatus('본문 내용을 입력해주세요.', 'error'); return; }
+
+  showStatus('회신창을 여는 중...');
+
+  const fullHtml = buildReplyHtml(subject, subjectTr, bodyTr, bodyOrig, true);
+
+  // displayReplyAllForm with HTML body
+  Office.context.mailbox.item.displayReplyAllForm({
+    htmlBody: fullHtml
+  });
+
+  showStatus('회신창이 열렸어요! 받는 사람을 확인하고 보내세요.', 'success');
+}
+
+// 작성 모드: 현재 회신창에 삽입 (fallback)
+function insertIntoCompose() {
   if (!isComposeMode) {
     showStatus('회신 작성 화면에서만 사용할 수 있어요.', 'error');
     return;
@@ -450,27 +510,29 @@ function buildAndInsert() {
   const { subject, subjectTr, bodyTr, bodyOrig } = getValues();
   if (!bodyTr && !bodyOrig) { showStatus('본문 내용을 입력해주세요.', 'error'); return; }
 
+  // 작성 모드에서는 인용 헤더 없이 (이미 본문에 있을 것이므로)
   const subjectLine = subjectTr || subject || '';
   const mg = `font-family:'Malgun Gothic','맑은 고딕',sans-serif;font-size:11pt;color:#4472C4;`;
   const mgb = mg + `font-weight:bold;`;
+  const plain = `font-family:'Malgun Gothic','맑은 고딕',sans-serif;font-size:11pt;`;
 
   const topHeader = HEADER_START +
     `<div style="${mg}">[번역/Translated] ${escHtml(subjectLine)}</div>` +
+    `<div style="${mg}">&nbsp;</div>` +
     `<div style="${mg}">번역문이 추가되었습니다.</div>` +
     `<div style="${mg}">Translation has been added.</div>` +
     `<div>&nbsp;</div>` +
-    HEADER_END;
-
-  const bottomSection = FOOTER_START +
-    `<div>&nbsp;</div>` +
     `<div style="${mgb}">[번역문 / Translation]</div>` +
-    `<div>${escHtml(bodyTr)}</div>` +
     `<div>&nbsp;</div>` +
-    `<div>---</div>` +
+    `<div style="${plain}">${escHtml(bodyTr)}</div>` +
+    `<div>&nbsp;</div>` +
+    `<div style="${plain}">---</div>` +
     `<div>&nbsp;</div>` +
     `<div style="${mgb}">[원문 / Original]</div>` +
-    `<div>${escHtml(bodyOrig)}</div>` +
-    FOOTER_END;
+    `<div>&nbsp;</div>` +
+    `<div style="${plain}">${escHtml(bodyOrig)}</div>` +
+    `<div>&nbsp;</div>` +
+    HEADER_END;
 
   showStatus('삽입 중...');
 
@@ -480,20 +542,20 @@ function buildAndInsert() {
       return;
     }
     let currentBody = rGet.value || '';
-    currentBody = cleanPriorInsertions(currentBody);
+    // 이전 마커 영역 제거
+    const headerRegex = new RegExp(HEADER_START.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + '[\\s\\S]*?' + HEADER_END.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'), 'g');
+    currentBody = currentBody.replace(headerRegex, '');
 
     let newBody;
     if (/<body[^>]*>/i.test(currentBody)) {
-      newBody = currentBody
-        .replace(/(<body[^>]*>)/i, '$1' + topHeader)
-        .replace(/(<\/body>)/i, bottomSection + '$1');
+      newBody = currentBody.replace(/(<body[^>]*>)/i, '$1' + topHeader);
     } else {
-      newBody = topHeader + currentBody + bottomSection;
+      newBody = topHeader + currentBody;
     }
 
     Office.context.mailbox.item.body.setAsync(newBody, { coercionType: Office.CoercionType.Html }, function(rSet) {
       if (rSet.status === Office.AsyncResultStatus.Succeeded) {
-        showStatus('회신에 삽입 완료!', 'success');
+        showStatus('삽입 완료!', 'success');
       } else {
         showStatus('삽입 실패: ' + (rSet.error?.message || ''), 'error');
       }
