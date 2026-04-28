@@ -445,6 +445,19 @@ function getValues() {
   return { subject, subjectTr, bodyTr, bodyOrig };
 }
 
+// 이전 번역 헤더 제거 (원문/번역문 오염 방지)
+function stripTranslationHeaders(text) {
+  return text
+    .replace(/\[번역\/Translated\][^\n]*/gi, '')
+    .replace(/번역문이 추가되었습니다\.?/gi, '')
+    .replace(/Translation has been added\.?/gi, '')
+    .replace(/\[번역문\s*\/\s*Translation\]/gi, '')
+    .replace(/\[원문\s*\/\s*Original\]/gi, '')
+    .replace(/^---\s*$/gm, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 // 회신창 본문 전체 HTML 생성
 function buildReplyHtml(subject, subjectTr, bodyTr, bodyOrig, includeQuoteHeader) {
   const subjectLine = subjectTr || subject || '';
@@ -452,36 +465,44 @@ function buildReplyHtml(subject, subjectTr, bodyTr, bodyOrig, includeQuoteHeader
   const mgb = mg + `font-weight:bold;`;
   const plain = `font-family:'Malgun Gothic','맑은 고딕',sans-serif;font-size:11pt;`;
 
-  // 상단 헤더: [번역/Translated] 제목 / 공백 / 번역문이 추가됐습니다 / Translation has been added.
-  let html = `<div style="${mg}">[번역/Translated] ${escHtml(subjectLine)}</div>`;
-  html += `<div style="${mg}">&nbsp;</div>`;
-  html += `<div style="${mg}">번역문이 추가되었습니다.</div>`;
-  html += `<div style="${mg}">Translation has been added.</div>`;
-  html += `<div>&nbsp;</div>`;
+  // 원문/번역문에서 이전 번역 헤더 제거
+  const cleanBodyTr = stripTranslationHeaders(bodyTr);
+  const cleanBodyOrig = stripTranslationHeaders(bodyOrig);
 
-  // 인용 메일 헤더 (읽기 모드에서 회신 만들 때만)
+  const parts = [];
+
+  // 1. 상단 헤더
+  parts.push(`<div style="${mg}">[번역/Translated] ${escHtml(subjectLine)}</div>`);
+  parts.push(`<div style="${mg}">&nbsp;</div>`);
+  parts.push(`<div style="${mg}">번역문이 추가되었습니다.</div>`);
+  parts.push(`<div style="${mg}">Translation has been added.</div>`);
+  parts.push(`<div>&nbsp;</div>`);
+
+  // 2. 인용 메일 헤더
   if (includeQuoteHeader && originalEmailMeta) {
-    html += `<div style="border-top:1px solid #ccc;margin:10px 0;"></div>`;
-    if (originalEmailMeta.from) html += `<div style="${plain}"><b>보낸 사람:</b> ${escHtml(originalEmailMeta.from)}</div>`;
-    if (originalEmailMeta.sentDate) html += `<div style="${plain}"><b>보낸 날짜:</b> ${escHtml(originalEmailMeta.sentDate)}</div>`;
-    if (originalEmailMeta.to) html += `<div style="${plain}"><b>받는 사람:</b> ${escHtml(originalEmailMeta.to)}</div>`;
-    if (originalEmailMeta.cc) html += `<div style="${plain}"><b>참조:</b> ${escHtml(originalEmailMeta.cc)}</div>`;
-    if (originalEmailMeta.subject) html += `<div style="${plain}"><b>제목:</b> ${escHtml(originalEmailMeta.subject)}</div>`;
-    html += `<div>&nbsp;</div>`;
+    parts.push(`<div style="border-top:1px solid #ccc;padding-top:8px;"></div>`);
+    if (originalEmailMeta.from)     parts.push(`<div style="${plain}"><b>보낸 사람:</b> ${escHtml(originalEmailMeta.from)}</div>`);
+    if (originalEmailMeta.sentDate) parts.push(`<div style="${plain}"><b>보낸 날짜:</b> ${escHtml(originalEmailMeta.sentDate)}</div>`);
+    if (originalEmailMeta.to)       parts.push(`<div style="${plain}"><b>받는 사람:</b> ${escHtml(originalEmailMeta.to)}</div>`);
+    if (originalEmailMeta.cc)       parts.push(`<div style="${plain}"><b>참조:</b> ${escHtml(originalEmailMeta.cc)}</div>`);
+    if (originalEmailMeta.subject)  parts.push(`<div style="${plain}"><b>제목:</b> ${escHtml(originalEmailMeta.subject)}</div>`);
+    parts.push(`<div>&nbsp;</div>`);
   }
 
-  // 번역문/원문 섹션
-  html += `<div style="${mgb}">[번역문 / Translation]</div>`;
-  html += `<div>&nbsp;</div>`;
-  html += `<div style="${plain}">${escHtml(bodyTr)}</div>`;
-  html += `<div>&nbsp;</div>`;
-  html += `<div style="${plain}">---</div>`;
-  html += `<div>&nbsp;</div>`;
-  html += `<div style="${mgb}">[원문 / Original]</div>`;
-  html += `<div>&nbsp;</div>`;
-  html += `<div style="${plain}">${escHtml(bodyOrig)}</div>`;
+  // 3. [번역문 / Translation] 다음 번역 내용
+  parts.push(`<div style="${mgb}">[번역문 / Translation]</div>`);
+  parts.push(`<div>&nbsp;</div>`);
+  parts.push(`<div style="${plain}">${escHtml(cleanBodyTr)}</div>`);
+  parts.push(`<div>&nbsp;</div>`);
+  parts.push(`<div style="${plain}">---</div>`);
+  parts.push(`<div>&nbsp;</div>`);
 
-  return html;
+  // 4. [원문 / Original] 다음 원문 내용
+  parts.push(`<div style="${mgb}">[원문 / Original]</div>`);
+  parts.push(`<div>&nbsp;</div>`);
+  parts.push(`<div style="${plain}">${escHtml(cleanBodyOrig)}</div>`);
+
+  return `<html><body>${parts.join('')}</body></html>`;
 }
 
 // 읽기 모드: 새 회신 만들기
