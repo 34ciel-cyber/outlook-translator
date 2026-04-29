@@ -60,10 +60,10 @@
 <div class="format-tag"><span class="dot"></span>맑은 고딕 11pt · #4472C4</div>
 
 <div id="banner-read" class="banner banner-read hidden">
-  <b>받은 메일 모드</b> — 번역 후 <b>회신 만들기</b>를 누르면 회신창이 열리고 포맷이 자동으로 들어가요.
+  <b>받은 메일 모드</b> — 번역하고 <b>회신 만들기</b>를 누르면, 회신창이 열려요. 그 창에서 Translation Helper 버튼만 한 번 더 누르면 자동으로 포맷이 들어가요.
 </div>
 <div id="banner-compose-empty" class="banner banner-compose hidden">
-  <b>회신 작성 모드</b> — 받은 메일 화면에서 패널을 먼저 열고 번역 후 <b>회신 만들기</b>를 누르세요.
+  <b>회신 작성 모드</b> — 받은 메일 화면에서 먼저 번역해주세요.
 </div>
 <div id="pending-box" class="pending-box hidden">
   <div class="pending-title">번역 준비 완료 — 삽입 대기 중</div>
@@ -169,8 +169,6 @@
 
 <div id="compose-insert-ui" class="hidden">
   <div id="status-msg-compose" class="status hidden"></div>
-  <button class="btn-green" id="insert-btn" onclick="insertPendingTranslation()">번역 삽입하기</button>
-  <button class="btn-small" style="width:100%;margin-top:6px;" onclick="clearPendingAndReset()">취소 (번역 데이터 삭제)</button>
 </div>
 
 <script>
@@ -212,8 +210,9 @@ Office.onReady(function(info){
     var pending=getPending();
     if(pending){
       show('pending-box');
-      show('compose-insert-ui');
-      document.getElementById('pending-desc').textContent='제목: '+pending.subjectLine;
+      document.getElementById('pending-desc').textContent='제목: '+pending.subjectLine+' — 자동 삽입 중...';
+      // 자동 삽입 (사용자가 버튼 누를 필요 없음)
+      setTimeout(function(){ autoInsert(); }, 500);
     } else {
       show('banner-compose-empty');
     }
@@ -417,28 +416,27 @@ function createReply(){
 }
 
 // ── 번역 삽입 ────────────────────────────────────────────
-function insertPendingTranslation(){
+function autoInsert(){
   var pending=getPending();
-  if(!pending){showStatusCompose('대기 중인 번역 데이터가 없어요.','error');return;}
-  var btn=document.getElementById('insert-btn');
-  btn.disabled=true; btn.textContent='삽입 중...';
+  if(!pending){show('banner-compose-empty');hide('pending-box');return;}
   Office.context.mailbox.item.body.getAsync(Office.CoercionType.Html,function(rGet){
     if(rGet.status!==Office.AsyncResultStatus.Succeeded){
-      showStatusCompose('본문 가져오기 실패','error');btn.disabled=false;btn.textContent='번역 삽입하기';return;
+      document.getElementById('pending-desc').textContent='본문 가져오기 실패. 패널을 닫았다 다시 열어주세요.';
+      return;
     }
     var newHtml=buildHtml(rGet.value||'',pending.subjectLine,pending.bodyTr,pending.bodyOrig);
     Office.context.mailbox.item.body.setAsync(newHtml,{coercionType:Office.CoercionType.Html},function(rSet){
       if(rSet.status===Office.AsyncResultStatus.Succeeded){
         clearPending();
-        showStatusCompose('삽입 완료!','success');
-        hide('pending-box');hide('compose-insert-ui');
+        document.getElementById('pending-desc').innerHTML='✅ 자동 삽입 완료! 회신창을 확인하세요.';
       } else {
-        showStatusCompose('삽입 실패: '+(rSet.error&&rSet.error.message||''),'error');
+        document.getElementById('pending-desc').textContent='삽입 실패: '+(rSet.error&&rSet.error.message||'')+'. 다시 시도하려면 패널을 닫았다 여세요.';
       }
-      btn.disabled=false;btn.textContent='번역 삽입하기';
     });
   });
 }
+
+function insertPendingTranslation(){ autoInsert(); }
 
 function buildHtml(currentHtml,subjectLine,bodyTr,bodyOrig){
   var mg='font-family:\'Malgun Gothic\',\'맑은 고딕\',sans-serif;font-size:11pt;color:#4472C4;';
@@ -451,15 +449,15 @@ function buildHtml(currentHtml,subjectLine,bodyTr,bodyOrig){
     '<div style="'+mg+'">Translation has been added.</div>'+
     '<br>';
   var translationSection=
-    '<br>'+
+    '<div>&nbsp;</div>'+
     '<div style="'+mgb+'">[번역문 / Translation]</div>'+
-    '<br>'+
+    '<div>&nbsp;</div>'+
     '<div style="'+plain+'">'+esc(bodyTr)+'</div>'+
-    '<br>'+
+    '<div>&nbsp;</div>'+
     '<div>---</div>'+
-    '<br>'+
+    '<div>&nbsp;</div>'+
     '<div style="'+mgb+'">[원문 / Original]</div>'+
-    '<br>';
+    '<div>&nbsp;</div>';
   var html=currentHtml;
   if(/<body[^>]*>/i.test(html)){html=html.replace(/(<body[^>]*>)/i,'$1'+topHeader);}
   else{html=topHeader+html;}
