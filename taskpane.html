@@ -8,71 +8,63 @@
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Segoe UI', sans-serif; font-size: 13px; background: #fff; color: #1f1f1f; padding: 12px; }
-
     .format-tag { display: flex; align-items: center; gap: 5px; font-size: 11px; color: #4472C4; background: rgba(68,114,196,0.08); border: 0.5px solid #4472C4; border-radius: 20px; padding: 3px 9px; margin-bottom: 12px; width: fit-content; }
     .dot { width: 7px; height: 7px; border-radius: 50%; background: #4472C4; }
-
-    .mode-banner { font-size: 11px; padding: 6px 8px; border-radius: 5px; margin-bottom: 12px; border-left: 2px solid #4472C4; background: rgba(68,114,196,0.06); color: #444; line-height: 1.5; }
-    .mode-banner.compose { border-left-color: #888; background: #f7f7f7; color: #666; }
-
+    .banner { font-size: 11px; padding: 7px 10px; border-radius: 5px; margin-bottom: 12px; line-height: 1.6; }
+    .banner-read { border-left: 3px solid #4472C4; background: rgba(68,114,196,0.06); }
+    .banner-compose { border-left: 3px solid #107c10; background: rgba(16,124,16,0.06); }
     .settings-toggle { font-size: 11px; color: #888; cursor: pointer; text-decoration: underline; margin-bottom: 10px; display: block; }
     .settings-panel { background: #f7f7f7; border: 1px solid #e0e0e0; border-radius: 6px; padding: 10px; margin-bottom: 12px; }
     .api-row { display: flex; gap: 6px; align-items: center; }
-    .api-row input { flex: 1; font-size: 11px; padding: 5px 8px; border: 1px solid #d0d0d0; border-radius: 5px; color: #1f1f1f; font-family: 'Segoe UI', sans-serif; }
-    .api-save-btn { font-size: 11px; font-weight: 600; padding: 5px 10px; border-radius: 5px; border: none; background: #4472C4; color: #fff; cursor: pointer; white-space: nowrap; }
+    .api-row input { flex: 1; font-size: 11px; padding: 5px 8px; border: 1px solid #d0d0d0; border-radius: 5px; font-family: 'Segoe UI', sans-serif; }
+    .api-save-btn { font-size: 11px; font-weight: 600; padding: 5px 10px; border-radius: 5px; border: none; background: #4472C4; color: #fff; cursor: pointer; }
     .api-key-status { font-size: 10px; margin-top: 5px; }
-    .api-key-status.ok { color: #107c10; }
-    .api-key-status.none { color: #c00; }
-
+    .api-key-status.ok { color: #107c10; } .api-key-status.none { color: #c00; }
     .seg { display: flex; border: 1px solid #d0d0d0; border-radius: 6px; overflow: hidden; margin-bottom: 12px; }
-    .seg-btn { flex: 1; padding: 6px 0; font-size: 12px; font-weight: 600; cursor: pointer; border: none; background: #fff; color: #666; transition: all 0.15s; }
+    .seg-btn { flex: 1; padding: 6px 0; font-size: 12px; font-weight: 600; cursor: pointer; border: none; background: #fff; color: #666; }
     .seg-btn.active { background: #4472C4; color: #fff; }
     .seg-btn:not(:last-child) { border-right: 1px solid #d0d0d0; }
-
     .lbl { font-size: 11px; font-weight: 600; color: #555; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; display: flex; align-items: center; gap: 5px; }
     .badge { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 10px; background: rgba(68,114,196,0.12); color: #4472C4; text-transform: none; letter-spacing: 0; }
-    .badge-success { background: rgba(16,124,16,0.12); color: #107c10; }
+    .badge-ok { background: rgba(16,124,16,0.12); color: #107c10; }
     .field { margin-bottom: 10px; }
     input[type=text], input[type=password], textarea { width: 100%; font-family: 'Segoe UI', sans-serif; font-size: 12px; border: 1px solid #d0d0d0; border-radius: 5px; padding: 6px 8px; line-height: 1.5; resize: vertical; color: #1f1f1f; }
-    input[type=text]:focus, textarea:focus { outline: none; border-color: #4472C4; }
     textarea { min-height: 70px; }
-
     .dir-row { display: flex; gap: 6px; margin-bottom: 10px; }
-    .dir-btn { flex: 1; padding: 6px 0; font-size: 11px; font-weight: 600; border-radius: 5px; cursor: pointer; border: 1px solid #d0d0d0; background: #fff; color: #666; transition: all 0.15s; }
+    .dir-btn { flex: 1; padding: 6px 0; font-size: 11px; font-weight: 600; border-radius: 5px; cursor: pointer; border: 1px solid #d0d0d0; background: #fff; color: #666; }
     .dir-btn.active { background: #1f1f1f; color: #fff; border-color: #1f1f1f; }
-
-    .btn-primary { width: 100%; padding: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border-radius: 6px; background: #4472C4; color: #fff; border: none; margin-bottom: 8px; transition: opacity 0.15s; }
-    .btn-primary:hover { opacity: 0.88; }
+    .btn-primary { width: 100%; padding: 9px; font-size: 13px; font-weight: 600; cursor: pointer; border-radius: 6px; background: #4472C4; color: #fff; border: none; margin-bottom: 8px; }
     .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
-    .btn-secondary { width: 100%; padding: 8px; font-size: 13px; font-weight: 600; cursor: pointer; border-radius: 6px; background: #1f1f1f; color: #fff; border: none; margin-bottom: 8px; transition: opacity 0.15s; }
-    .btn-secondary:hover { opacity: 0.85; }
-    .btn-secondary:disabled { opacity: 0.4; cursor: not-allowed; }
-    .btn-small { font-size: 11px; font-weight: 600; padding: 5px 10px; border-radius: 5px; border: 1px solid #d0d0d0; background: #fff; color: #555; cursor: pointer; transition: all 0.15s; }
-    .btn-small:hover { background: #f0f0f0; }
-
+    .btn-green { width: 100%; padding: 9px; font-size: 13px; font-weight: 600; cursor: pointer; border-radius: 6px; background: #107c10; color: #fff; border: none; margin-bottom: 8px; }
+    .btn-green:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-small { font-size: 11px; font-weight: 600; padding: 5px 10px; border-radius: 5px; border: 1px solid #d0d0d0; background: #fff; color: #555; cursor: pointer; }
     .status { font-size: 11px; color: #888; text-align: center; padding: 4px 0 8px; word-break: break-word; }
-    .status.success { color: #107c10; }
-    .status.error { color: #c00; padding: 6px 8px; background: #fef0f0; border-radius: 4px; border: 1px solid #f5c0c0; text-align: left; }
-
+    .status.success { color: #107c10; } .status.error { color: #c00; padding: 6px 8px; background: #fef0f0; border-radius: 4px; border: 1px solid #f5c0c0; text-align: left; }
     .ai-hint { font-size: 11px; color: #666; padding: 6px 8px; background: rgba(68,114,196,0.06); border-left: 2px solid #4472C4; border-radius: 3px; margin-bottom: 8px; line-height: 1.5; }
     .edit-hint { font-size: 11px; color: #aaa; margin-top: 4px; }
-    .source-hint { font-size: 10px; color: #888; margin-bottom: 4px; line-height: 1.4; }
-    .reload-row { display: flex; justify-content: flex-end; margin-top: 4px; gap: 6px; }
+    .src-hint { font-size: 10px; color: #888; margin-bottom: 4px; line-height: 1.4; }
+    .reload-row { display: flex; justify-content: flex-end; margin-top: 4px; }
+    .pending-box { border: 1px solid #107c10; border-radius: 6px; padding: 10px 12px; background: rgba(16,124,16,0.05); margin-bottom: 12px; }
+    .pending-title { font-size: 12px; font-weight: 600; color: #107c10; margin-bottom: 4px; }
+    .pending-desc { font-size: 11px; color: #555; line-height: 1.5; }
     .hidden { display: none !important; }
   </style>
 </head>
 <body>
-
 <div class="format-tag"><span class="dot"></span>맑은 고딕 11pt · #4472C4</div>
 
-<div id="mode-banner-read" class="mode-banner hidden">
-  <strong>읽기 모드</strong> · 받은 메일에서 번역 준비 후 <strong>회신 만들기</strong> 버튼을 누르면 포맷이 적용된 회신창이 자동으로 열려요.
+<div id="banner-read" class="banner banner-read hidden">
+  <b>받은 메일 모드</b> — 번역 후 <b>회신 만들기</b>를 누르면 회신창이 열리고 포맷이 자동으로 들어가요.
 </div>
-<div id="mode-banner-compose" class="mode-banner compose hidden">
-  <strong>작성 모드</strong> · 가능하면 회신을 닫고 받은 메일 화면에서 시작하면 더 깔끔해요.
+<div id="banner-compose-empty" class="banner banner-compose hidden">
+  <b>회신 작성 모드</b> — 받은 메일 화면에서 패널을 먼저 열고 번역 후 <b>회신 만들기</b>를 누르면 이 창에 자동으로 내용이 들어와요.
+</div>
+<div id="pending-box" class="pending-box hidden">
+  <div class="pending-title">번역 준비 완료 — 삽입 대기 중</div>
+  <div class="pending-desc" id="pending-desc"></div>
 </div>
 
-<span class="settings-toggle" onclick="toggleSettings()">⚙ API 키 설정</span>
+<span class="settings-toggle" onclick="toggleSettings()">API 키 설정</span>
 <div class="settings-panel hidden" id="settings-panel">
   <div class="lbl" style="margin-bottom:6px;">Anthropic API 키 <span class="badge">이 기기에만 저장</span></div>
   <div class="api-row">
@@ -82,507 +74,320 @@
   <div class="api-key-status" id="api-key-status"></div>
 </div>
 
-<div class="seg">
-  <button class="seg-btn active" id="mode-manual" onclick="setMode('manual')">직접 번역</button>
-  <button class="seg-btn" id="mode-ai" onclick="setMode('ai')">AI 초벌 번역</button>
-</div>
-
-<div id="panel-dir" class="hidden">
-  <div class="lbl" style="margin-bottom:4px;">번역 방향</div>
-  <div class="dir-row">
-    <button class="dir-btn active" id="btn-ko-en" onclick="setDir('ko-en')">한국어 → EN</button>
-    <button class="dir-btn" id="btn-en-ko" onclick="setDir('en-ko')">EN → 한국어</button>
+<div id="read-ui" class="hidden">
+  <div class="seg">
+    <button class="seg-btn active" id="mode-manual" onclick="setMode('manual')">직접 번역</button>
+    <button class="seg-btn" id="mode-ai" onclick="setMode('ai')">AI 초벌 번역</button>
   </div>
-</div>
-
-<div class="field">
-  <div class="lbl">메일 제목 <span class="badge">원문</span></div>
-  <input type="text" id="subject" placeholder="제목 자동 입력됨" />
-</div>
-
-<div class="field hidden" id="subject-tr-wrap">
-  <div class="lbl">번역된 제목</div>
-  <input type="text" id="subject-translated" placeholder="번역된 제목" />
-</div>
-
-<div id="panel-manual">
-  <div class="field">
-    <div class="lbl">번역문 본문</div>
-    <textarea id="body-tr-manual" placeholder="번역된 본문을 붙여넣으세요."></textarea>
-  </div>
-  <div class="field">
-    <div class="lbl">원문 본문 <span class="badge" id="src-badge-manual">자동</span></div>
-    <div class="source-hint">메일에서 텍스트를 선택해두면 그 부분이, 안 하면 가장 최근 메일이 자동으로 들어와요.</div>
-    <textarea id="body-orig-manual" placeholder="원문 본문 (자동 입력 또는 직접 붙여넣기)"></textarea>
-    <div class="reload-row">
-      <button class="btn-small" onclick="reloadSource()">↻ 원문 다시 불러오기</button>
+  <div id="panel-dir" class="hidden">
+    <div class="lbl" style="margin-bottom:4px;">번역 방향</div>
+    <div class="dir-row">
+      <button class="dir-btn active" id="btn-ko-en" onclick="setDir('ko-en')">한국어 → EN</button>
+      <button class="dir-btn" id="btn-en-ko" onclick="setDir('en-ko')">EN → 한국어</button>
     </div>
   </div>
-</div>
-
-<div id="panel-ai" class="hidden">
   <div class="field">
-    <div class="lbl">원문 본문 <span class="badge" id="src-badge-ai">자동</span></div>
-    <div class="source-hint">메일에서 텍스트를 선택해두면 그 부분이, 안 하면 가장 최근 메일이 자동으로 들어와요.</div>
-    <textarea id="body-orig-ai" placeholder="원문 본문 (자동 입력 또는 직접 붙여넣기)"></textarea>
-    <div class="reload-row">
-      <button class="btn-small" onclick="reloadSource()">↻ 원문 다시 불러오기</button>
+    <div class="lbl">메일 제목 <span class="badge">원문</span></div>
+    <input type="text" id="subject" placeholder="자동 입력됨" />
+  </div>
+  <div class="field hidden" id="subject-tr-wrap">
+    <div class="lbl">번역된 제목</div>
+    <input type="text" id="subject-translated" placeholder="번역된 제목" />
+  </div>
+  <div id="panel-manual">
+    <div class="field">
+      <div class="lbl">번역문 본문</div>
+      <textarea id="body-tr-manual" placeholder="번역된 본문을 붙여넣으세요."></textarea>
+    </div>
+    <div class="field">
+      <div class="lbl">원문 본문 <span class="badge" id="src-badge-manual">자동</span></div>
+      <div class="src-hint">메일에서 텍스트 선택 시 그 부분이, 안 하면 가장 최근 메일 본문이 들어와요.</div>
+      <textarea id="body-orig-manual" placeholder="원문 본문 (자동 입력됨)"></textarea>
+      <div class="reload-row"><button class="btn-small" onclick="reloadSource()">다시 불러오기</button></div>
     </div>
   </div>
-  <button class="btn-primary" id="ai-btn" onclick="runAI()">Claude 초벌 번역 ↗</button>
-  <div id="ai-result-field" class="hidden">
-    <div class="field" style="margin-top:8px;">
-      <div class="lbl">초벌 번역 결과 <span class="badge">수정 가능</span></div>
-      <textarea id="body-tr-ai" style="min-height:80px;"></textarea>
-      <div class="edit-hint">수정 후 아래 <strong>회신 만들기</strong> 버튼을 누르세요.</div>
+  <div id="panel-ai" class="hidden">
+    <div class="field">
+      <div class="lbl">원문 본문 <span class="badge" id="src-badge-ai">자동</span></div>
+      <div class="src-hint">메일에서 텍스트 선택 시 그 부분이, 안 하면 가장 최근 메일 본문이 들어와요.</div>
+      <div class="ai-hint">Claude가 초벌 번역해드려요.</div>
+      <textarea id="body-orig-ai" placeholder="원문 본문 (자동 입력됨)"></textarea>
+      <div class="reload-row"><button class="btn-small" onclick="reloadSource()">다시 불러오기</button></div>
+    </div>
+    <button class="btn-primary" id="ai-btn" onclick="runAI()">Claude 초벌 번역</button>
+    <div id="ai-result-field" class="hidden">
+      <div class="field" style="margin-top:8px;">
+        <div class="lbl">초벌 번역 결과 <span class="badge">수정 가능</span></div>
+        <textarea id="body-tr-ai" style="min-height:80px;"></textarea>
+        <div class="edit-hint">수정 후 회신 만들기를 누르세요.</div>
+      </div>
     </div>
   </div>
+  <div id="status-msg" class="status hidden"></div>
+  <button class="btn-green" onclick="createReply()">회신 만들기</button>
 </div>
 
-<div id="status-msg" class="status hidden"></div>
-
-<button class="btn-primary hidden" id="create-reply-btn" onclick="createFormattedReply()">📧 회신 만들기 (자동)</button>
-<button class="btn-secondary hidden" id="insert-btn" onclick="insertIntoCompose()">현재 회신창에 삽입</button>
+<div id="compose-insert-ui" class="hidden">
+  <div id="status-msg-compose" class="status hidden"></div>
+  <button class="btn-green" id="insert-btn" onclick="insertPendingTranslation()">번역 삽입하기</button>
+  <button class="btn-small" style="width:100%;margin-top:6px;" onclick="clearPendingAndReset()">취소 (번역 데이터 삭제)</button>
+</div>
 
 <script>
-let mode = 'manual';
-let direction = 'ko-en';
-let isComposeMode = false;
-let originalEmailMeta = null; // 읽기 모드에서 캐싱: 보낸 사람, 날짜 등
+var mode = 'manual', direction = 'ko-en', isComposeMode = false;
+function show(id){document.getElementById(id).classList.remove('hidden');}
+function hide(id){document.getElementById(id).classList.add('hidden');}
 
-const HEADER_START = '<!--TH-HEADER-START-->';
-const HEADER_END = '<!--TH-HEADER-END-->';
-
-function show(id) { document.getElementById(id).classList.remove('hidden'); }
-function hide(id) { document.getElementById(id).classList.add('hidden'); }
-
-function loadApiKey() {
-  try {
-    const key = localStorage.getItem('anthropic_api_key') || '';
-    const statusEl = document.getElementById('api-key-status');
-    if (key) {
-      document.getElementById('api-key-input').value = key;
-      statusEl.textContent = '키 저장됨 ✓';
-      statusEl.className = 'api-key-status ok';
-    } else {
-      statusEl.textContent = 'API 키가 없습니다. AI 번역을 사용하려면 입력해주세요.';
-      statusEl.className = 'api-key-status none';
-    }
-  } catch(e) {}
+function loadApiKey(){
+  try{
+    var k=localStorage.getItem('anthropic_api_key')||'';
+    var el=document.getElementById('api-key-status');
+    if(k){document.getElementById('api-key-input').value=k;el.textContent='키 저장됨';el.className='api-key-status ok';}
+    else{el.textContent='API 키 없음';el.className='api-key-status none';}
+  }catch(e){}
 }
-
-function saveApiKey() {
-  const key = document.getElementById('api-key-input').value.trim();
-  const statusEl = document.getElementById('api-key-status');
-  try {
-    if (key) {
-      localStorage.setItem('anthropic_api_key', key);
-      statusEl.textContent = '저장됐습니다! ✓';
-      statusEl.className = 'api-key-status ok';
-    } else {
-      localStorage.removeItem('anthropic_api_key');
-      statusEl.textContent = '키가 삭제됐습니다.';
-      statusEl.className = 'api-key-status none';
-    }
-  } catch(e) {
-    statusEl.textContent = '저장 실패: ' + e.message;
-    statusEl.className = 'api-key-status none';
-  }
+function saveApiKey(){
+  var k=document.getElementById('api-key-input').value.trim();
+  var el=document.getElementById('api-key-status');
+  try{
+    if(k){localStorage.setItem('anthropic_api_key',k);el.textContent='저장됐습니다!';el.className='api-key-status ok';}
+    else{localStorage.removeItem('anthropic_api_key');el.textContent='삭제됐습니다.';el.className='api-key-status none';}
+  }catch(e){el.textContent='저장 실패';el.className='api-key-status none';}
 }
+function toggleSettings(){document.getElementById('settings-panel').classList.toggle('hidden');}
 
-function toggleSettings() {
-  document.getElementById('settings-panel').classList.toggle('hidden');
-}
-
-Office.onReady(function(info) {
+Office.onReady(function(info){
   loadApiKey();
-  if (info.host !== Office.HostType.Outlook) return;
-
-  const item = Office.context.mailbox.item;
-  isComposeMode = typeof item.subject !== 'string';
-
-  if (isComposeMode) {
-    show('mode-banner-compose');
-    show('insert-btn');
-    item.subject.getAsync(function(r) {
-      if (r.status === Office.AsyncResultStatus.Succeeded)
-        document.getElementById('subject').value = (r.value || '').replace(/^(RE:\s*|\[EXT\]\s*|Fw:\s*)+/gi, '').trim();
-    });
-    reloadSource();
+  if(info.host!==Office.HostType.Outlook) return;
+  var item=Office.context.mailbox.item;
+  isComposeMode=typeof item.subject!=='string';
+  if(isComposeMode){
+    var pending=getPending();
+    if(pending){
+      show('pending-box');
+      show('compose-insert-ui');
+      document.getElementById('pending-desc').textContent='제목: '+pending.subjectLine;
+    } else {
+      show('banner-compose-empty');
+    }
   } else {
-    show('mode-banner-read');
-    show('create-reply-btn');
-    // 메타 정보 캐싱
-    originalEmailMeta = {
-      subject: (item.subject || '').replace(/^(RE:\s*|\[EXT\]\s*|Fw:\s*)+/gi, '').trim(),
-      from: item.from ? `${item.from.displayName} <${item.from.emailAddress}>` : '',
-      to: (item.to || []).map(r => `${r.displayName} <${r.emailAddress}>`).join('; '),
-      cc: (item.cc || []).map(r => `${r.displayName} <${r.emailAddress}>`).join('; '),
-      sentDate: item.dateTimeCreated ? formatDate(item.dateTimeCreated) : '',
-      itemId: item.itemId
-    };
-    document.getElementById('subject').value = originalEmailMeta.subject;
+    show('banner-read');
+    show('read-ui');
+    document.getElementById('subject').value=(item.subject||'').replace(/^(RE:\s*|\[EXT\]\s*|Fw:\s*)+/gi,'').trim();
     reloadSource();
   }
 });
 
-function formatDate(d) {
-  if (!d) return '';
-  const date = new Date(d);
-  const days = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
-  const yyyy = date.getFullYear();
-  const m = date.getMonth() + 1;
-  const dd = date.getDate();
-  const day = days[date.getDay()];
-  let h = date.getHours();
-  const min = date.getMinutes();
-  const ampm = h < 12 ? '오전' : '오후';
-  h = h % 12 || 12;
-  return `${yyyy}년 ${m}월 ${dd}일 ${day} ${ampm} ${h}:${String(min).padStart(2,'0')}`;
-}
-
-function setSrcBadge(label, success) {
-  ['src-badge-manual', 'src-badge-ai'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) {
-      el.textContent = label;
-      el.className = success ? 'badge badge-success' : 'badge';
-    }
+function setSrcBadge(label,ok){
+  ['src-badge-manual','src-badge-ai'].forEach(function(id){
+    var el=document.getElementById(id);
+    if(el){el.textContent=label;el.className=ok?'badge badge-ok':'badge';}
   });
 }
-
-function reloadSource() {
-  if (!Office.context.mailbox.item) return;
-  const item = Office.context.mailbox.item;
-
-  if (item.getSelectedDataAsync) {
-    item.getSelectedDataAsync(Office.CoercionType.Text, function(rSel) {
-      if (rSel.status === Office.AsyncResultStatus.Succeeded
-          && rSel.value && rSel.value.data && rSel.value.data.trim()) {
-        const selectedText = rSel.value.data.trim();
-        document.getElementById('body-orig-manual').value = selectedText;
-        document.getElementById('body-orig-ai').value = selectedText;
-        setSrcBadge('선택한 부분', true);
-        return;
-      }
-      extractMessageBody();
+function reloadSource(){
+  var item=Office.context.mailbox.item;
+  if(!item) return;
+  if(item.getSelectedDataAsync){
+    item.getSelectedDataAsync(Office.CoercionType.Text,function(r){
+      if(r.status===Office.AsyncResultStatus.Succeeded&&r.value&&r.value.data&&r.value.data.trim()){
+        setOrig(r.value.data.trim(),'선택한 부분');
+      } else { extractBody(); }
     });
-  } else {
-    extractMessageBody();
-  }
+  } else { extractBody(); }
 }
-
-function extractMessageBody() {
-  Office.context.mailbox.item.body.getAsync(Office.CoercionType.Text, function(r) {
-    if (r.status !== Office.AsyncResultStatus.Succeeded) {
-      setSrcBadge('자동 입력 실패', false);
-      return;
-    }
-    const fullText = r.value || '';
-    const extracted = extractMostRecentEmail(fullText);
-    document.getElementById('body-orig-manual').value = extracted;
-    document.getElementById('body-orig-ai').value = extracted;
-    setSrcBadge(isComposeMode ? '가장 최근 메일' : '메일 본문', true);
+function extractBody(){
+  Office.context.mailbox.item.body.getAsync(Office.CoercionType.Text,function(r){
+    if(r.status!==Office.AsyncResultStatus.Succeeded){setSrcBadge('불러오기 실패',false);return;}
+    setOrig(extractLatest(r.value||''),'가장 최근 메일');
   });
 }
-
-function extractMostRecentEmail(text) {
-  const lines = text.split('\n');
-  let firstQuoteIdx = -1;
-  for (let i = 0; i < lines.length; i++) {
-    if (/^(보낸 사람|보낸사람|From)\s*:/i.test(lines[i].trim())) {
-      firstQuoteIdx = i;
-      break;
-    }
+function setOrig(text,label){
+  document.getElementById('body-orig-manual').value=text;
+  document.getElementById('body-orig-ai').value=text;
+  setSrcBadge(label,true);
+}
+function extractLatest(text){
+  var lines=text.split('\n');
+  var qi=-1;
+  for(var i=0;i<lines.length;i++){if(/^(보낸 사람|보낸사람|From)\s*:/i.test(lines[i].trim())){qi=i;break;}}
+  if(qi===-1) return lines.filter(function(l){return!l.match(/번역\s*부탁드립니다|Please\s*translate/i);}).join('\n').trim();
+  var rb=lines.slice(0,qi).filter(function(l){return!l.match(/번역\s*부탁드립니다|Please\s*translate/i);}).join('\n').trim();
+  if(rb.length>10) return rb;
+  var start=qi;
+  for(var i=qi;i<lines.length;i++){
+    var t=lines[i].trim();
+    if(!/^(보낸 사람|보낸사람|보낸 날짜|보낸날짜|받는 사람|받는사람|참조|숨은 참조|제목|From|Sent|To|Cc|Bcc|Subject)\s*:/i.test(t)&&t.length>0){start=i;break;}
   }
-
-  // 회신 본문이 있으면 그 부분만
-  let replyBody = '';
-  if (firstQuoteIdx > 0) {
-    replyBody = lines.slice(0, firstQuoteIdx)
-      .filter(line => !line.match(/번역\s*부탁드립니다|Please\s*translate/i))
-      .join('\n').trim();
-  } else if (firstQuoteIdx === -1) {
-    return lines
-      .filter(line => !line.match(/번역\s*부탁드립니다|Please\s*translate/i))
-      .join('\n').trim();
-  }
-  if (replyBody.length > 10) return replyBody;
-
-  // 첫 인용 메일에서 헤더 건너뛰고 본문만
-  let bodyStart = firstQuoteIdx;
-  for (let i = firstQuoteIdx; i < lines.length; i++) {
-    const trimmed = lines[i].trim();
-    if (!/^(보낸 사람|보낸사람|보낸 날짜|보낸날짜|받는 사람|받는사람|참조|숨은 참조|제목|From|Sent|To|Cc|Bcc|Subject)\s*:/i.test(trimmed)
-        && trimmed.length > 0) {
-      bodyStart = i;
-      break;
-    }
-  }
-
-  let bodyEnd = lines.length;
-  for (let i = bodyStart + 1; i < lines.length; i++) {
-    if (/^(보낸 사람|보낸사람|From)\s*:/i.test(lines[i].trim())) {
-      bodyEnd = i;
-      break;
-    }
-  }
-
-  return lines.slice(bodyStart, bodyEnd)
-    .filter(line => !line.match(/번역\s*부탁드립니다|Please\s*translate/i))
-    .join('\n').trim();
+  var end=lines.length;
+  for(var i=start+1;i<lines.length;i++){if(/^(보낸 사람|보낸사람|From)\s*:/i.test(lines[i].trim())){end=i;break;}}
+  return lines.slice(start,end).filter(function(l){return!l.match(/번역\s*부탁드립니다|Please\s*translate/i);}).join('\n').trim();
 }
 
-function setMode(m) {
-  mode = m;
-  document.getElementById('mode-manual').classList.toggle('active', m === 'manual');
-  document.getElementById('mode-ai').classList.toggle('active', m === 'ai');
-  if (m === 'manual') {
-    show('panel-manual'); hide('panel-ai'); hide('panel-dir'); show('subject-tr-wrap');
-  } else {
-    hide('panel-manual'); show('panel-ai'); show('panel-dir'); hide('subject-tr-wrap');
-  }
+function setMode(m){
+  mode=m;
+  document.getElementById('mode-manual').classList.toggle('active',m==='manual');
+  document.getElementById('mode-ai').classList.toggle('active',m==='ai');
+  if(m==='manual'){show('panel-manual');hide('panel-ai');hide('panel-dir');show('subject-tr-wrap');}
+  else{hide('panel-manual');show('panel-ai');show('panel-dir');hide('subject-tr-wrap');}
+}
+function setDir(d){
+  direction=d;
+  document.getElementById('btn-ko-en').classList.toggle('active',d==='ko-en');
+  document.getElementById('btn-en-ko').classList.toggle('active',d==='en-ko');
 }
 
-function setDir(d) {
-  direction = d;
-  document.getElementById('btn-ko-en').classList.toggle('active', d === 'ko-en');
-  document.getElementById('btn-en-ko').classList.toggle('active', d === 'en-ko');
-}
-
-async function runAI() {
-  const apiKey = localStorage.getItem('anthropic_api_key') || '';
-  if (!apiKey) {
-    showStatus('API 키가 없어요. 상단 ⚙ API 키 설정을 눌러 입력해주세요.', 'error');
-    show('settings-panel');
-    return;
-  }
-  const subject = document.getElementById('subject').value.trim();
-  const body = document.getElementById('body-orig-ai').value.trim();
-  if (!body) { showStatus('원문 본문을 입력해주세요.', 'error'); return; }
-
-  const btn = document.getElementById('ai-btn');
-  btn.disabled = true;
-  btn.textContent = '번역 중...';
-  showStatus('Claude가 초벌 번역 중입니다...');
-
-  const srcLang = direction === 'ko-en' ? 'Korean' : 'English';
-  const tgtLang = direction === 'ko-en' ? 'English' : 'Korean';
-
-  try {
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true'
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 2000,
-        system: `You are a professional in-house translator. Translate the email content from ${srcLang} to ${tgtLang} accurately and naturally, preserving tone and formality. Return ONLY a valid JSON object with no markdown formatting, no code fences, no explanation. Format exactly: {"translatedSubject": "...", "translatedBody": "..."}`,
-        messages: [{ role: 'user', content: `Subject: ${subject || '(none)'}\n\nBody:\n${body}` }]
-      })
-    });
-
-    const responseText = await resp.text();
-    if (!resp.ok) {
-      let errMsg = `HTTP ${resp.status}`;
-      try {
-        const errData = JSON.parse(responseText);
-        errMsg = errData.error?.message || errData.message || errMsg;
-      } catch(e) {}
-      throw new Error(errMsg);
-    }
-
-    const data = JSON.parse(responseText);
-    if (!data.content || !data.content.length) throw new Error('응답에 content가 없습니다.');
-
-    const raw = data.content.map(b => b.text || '').join('');
-    let parsed;
-    try {
-      parsed = JSON.parse(raw.replace(/```json|```/g, '').trim());
-    } catch(e) {
-      throw new Error('JSON 파싱 실패. 응답: ' + raw.substring(0, 150));
-    }
-
-    if (parsed.translatedSubject) {
-      document.getElementById('subject-translated').value = parsed.translatedSubject;
-    }
-    document.getElementById('body-tr-ai').value = parsed.translatedBody || '';
+function runAI(){
+  var apiKey=localStorage.getItem('anthropic_api_key')||'';
+  if(!apiKey){showStatus('API 키가 없어요.','error');show('settings-panel');return;}
+  var subject=document.getElementById('subject').value.trim();
+  var body=document.getElementById('body-orig-ai').value.trim();
+  if(!body){showStatus('원문 본문을 입력해주세요.','error');return;}
+  var btn=document.getElementById('ai-btn');
+  btn.disabled=true;btn.textContent='번역 중...';
+  showStatus('Claude가 번역 중입니다...');
+  var srcLang=direction==='ko-en'?'Korean':'English';
+  var tgtLang=direction==='ko-en'?'English':'Korean';
+  fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+    body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:2000,
+      system:'Professional translator. Translate from '+srcLang+' to '+tgtLang+'. Return ONLY JSON: {"translatedSubject":"...","translatedBody":"..."}',
+      messages:[{role:'user',content:'Subject: '+(subject||'(none)')+'\n\nBody:\n'+body}]})
+  }).then(function(r){return r.text().then(function(t){return{ok:r.ok,text:t};});})
+  .then(function(res){
+    if(!res.ok){var e=JSON.parse(res.text);throw new Error(e.error&&e.error.message||'HTTP error');}
+    var data=JSON.parse(res.text);
+    var raw=data.content.map(function(b){return b.text||'';}).join('');
+    var parsed=JSON.parse(raw.replace(/```json|```/g,'').trim());
+    if(parsed.translatedSubject) document.getElementById('subject-translated').value=parsed.translatedSubject;
+    document.getElementById('body-tr-ai').value=parsed.translatedBody||'';
     show('ai-result-field');
-    showStatus('번역 완료! 이제 회신 만들기 버튼을 누르세요.', 'success');
-  } catch(e) {
-    showStatus('AI 번역 오류: ' + e.message, 'error');
-    console.error('Translation error:', e);
+    showStatus('번역 완료! 회신 만들기를 누르세요.','success');
+  }).catch(function(e){showStatus('AI 오류: '+e.message,'error');})
+  .finally(function(){btn.disabled=false;btn.textContent='Claude 초벌 번역';});
+}
+
+function showStatus(msg,type){
+  var el=document.getElementById('status-msg');
+  el.textContent=msg;el.className='status'+(type?' '+type:'');el.classList.remove('hidden');
+  if(type==='success') setTimeout(function(){el.classList.add('hidden');},4000);
+}
+function showStatusCompose(msg,type){
+  var el=document.getElementById('status-msg-compose');
+  el.textContent=msg;el.className='status'+(type?' '+type:'');el.classList.remove('hidden');
+  if(type==='success') setTimeout(function(){el.classList.add('hidden');},4000);
+}
+
+function createReply(){
+  var subject=document.getElementById('subject').value.trim();
+  var subjectTr=document.getElementById('subject-translated').value.trim();
+  var bodyTr=mode==='manual'?document.getElementById('body-tr-manual').value.trim():document.getElementById('body-tr-ai').value.trim();
+  var bodyOrig=mode==='manual'?document.getElementById('body-orig-manual').value.trim():document.getElementById('body-orig-ai').value.trim();
+  if(!bodyTr){showStatus('번역문 본문을 입력해주세요.','error');return;}
+  var subjectLine=subjectTr||subject||'';
+  savePending({subjectLine:subjectLine, bodyTr:stripTH(bodyTr), bodyOrig:stripTH(bodyOrig)});
+  Office.context.mailbox.item.displayReplyAllForm({});
+  showStatus('회신창이 열렸어요. 그 창에서 Translation Helper를 열면 자동으로 들어가요.','success');
+}
+
+function insertPendingTranslation(){
+  var pending=getPending();
+  if(!pending){showStatusCompose('대기 중인 번역 데이터가 없어요.','error');return;}
+  var btn=document.getElementById('insert-btn');
+  btn.disabled=true;btn.textContent='삽입 중...';
+  Office.context.mailbox.item.body.getAsync(Office.CoercionType.Html,function(rGet){
+    if(rGet.status!==Office.AsyncResultStatus.Succeeded){
+      showStatusCompose('본문 가져오기 실패','error');btn.disabled=false;btn.textContent='번역 삽입하기';return;
+    }
+    var newHtml=buildHtml(rGet.value||'',pending.subjectLine,pending.bodyTr,pending.bodyOrig);
+    Office.context.mailbox.item.body.setAsync(newHtml,{coercionType:Office.CoercionType.Html},function(rSet){
+      if(rSet.status===Office.AsyncResultStatus.Succeeded){
+        clearPending();
+        showStatusCompose('삽입 완료!','success');
+        hide('pending-box');hide('compose-insert-ui');
+      } else {
+        showStatusCompose('삽입 실패: '+(rSet.error&&rSet.error.message||''),'error');
+      }
+      btn.disabled=false;btn.textContent='번역 삽입하기';
+    });
+  });
+}
+
+function buildHtml(currentHtml,subjectLine,bodyTr,bodyOrig){
+  var mg='font-family:\'Malgun Gothic\',\'맑은 고딕\',sans-serif;font-size:11pt;color:#4472C4;';
+  var mgb='font-family:\'Malgun Gothic\',\'맑은 고딕\',sans-serif;font-size:11pt;color:#4472C4;font-weight:bold;';
+  var plain='font-family:\'Malgun Gothic\',\'맑은 고딕\',sans-serif;font-size:11pt;';
+
+  var topHeader=
+    '<div style="'+mg+'">[번역/Translated] '+esc(subjectLine)+'</div>'+
+    '<br>'+
+    '<div style="'+mg+'">번역문이 추가되었습니다.</div>'+
+    '<div style="'+mg+'">Translation has been added.</div>'+
+    '<br>';
+
+  var translationSection=
+    '<br>'+
+    '<div style="'+mgb+'">[번역문 / Translation]</div>'+
+    '<br>'+
+    '<div style="'+plain+'">'+esc(bodyTr)+'</div>'+
+    '<br>'+
+    '<div>---</div>'+
+    '<br>'+
+    '<div style="'+mgb+'">[원문 / Original]</div>'+
+    '<br>';
+
+  var html=currentHtml;
+  // 1. 상단 헤더 삽입
+  if(/<body[^>]*>/i.test(html)){
+    html=html.replace(/(<body[^>]*>)/i,'$1'+topHeader);
+  } else {
+    html=topHeader+html;
   }
-  btn.disabled = false;
-  btn.textContent = 'Claude 초벌 번역 ↗';
+
+  // 2. 인용 헤더(제목 라인) 다음에 번역 섹션 삽입
+  var patterns=[
+    /(<b>제목[^:]*:?<\/b>[^<]*(?:<br\s*\/?>)?)/i,
+    /(<b>Subject[^:]*:?<\/b>[^<]*(?:<br\s*\/?>)?)/i,
+    /(<strong>제목[^:]*:?<\/strong>[^<]*(?:<br\s*\/?>)?)/i,
+    /(<strong>Subject[^:]*:?<\/strong>[^<]*(?:<br\s*\/?>)?)/i
+  ];
+  var inserted=false;
+  for(var i=0;i<patterns.length;i++){
+    if(patterns[i].test(html)){
+      html=html.replace(patterns[i],'$1'+translationSection);
+      inserted=true; break;
+    }
+  }
+  if(!inserted){
+    var hrMatch=html.match(/<hr[^>]*>/i);
+    if(hrMatch){
+      var idx=html.indexOf(hrMatch[0])+hrMatch[0].length;
+      html=html.slice(0,idx)+translationSection+html.slice(idx);
+    } else {
+      html=html.replace(/<\/body>/i,translationSection+'</body>');
+    }
+  }
+  return html;
 }
 
-function showStatus(msg, type) {
-  const el = document.getElementById('status-msg');
-  el.textContent = msg;
-  el.className = 'status' + (type ? ' ' + type : '');
-  el.classList.remove('hidden');
-  if (type === 'success') setTimeout(() => el.classList.add('hidden'), 4000);
-}
-
-function escHtml(s) {
+function esc(s){
   return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
 }
-
-function getValues() {
-  const subject = document.getElementById('subject').value.trim();
-  const subjectTr = document.getElementById('subject-translated').value.trim();
-  const bodyTr = mode === 'manual'
-    ? document.getElementById('body-tr-manual').value.trim()
-    : document.getElementById('body-tr-ai').value.trim();
-  const bodyOrig = mode === 'manual'
-    ? document.getElementById('body-orig-manual').value.trim()
-    : document.getElementById('body-orig-ai').value.trim();
-  return { subject, subjectTr, bodyTr, bodyOrig };
-}
-
-// 이전 번역 헤더 제거 (원문/번역문 오염 방지)
-function stripTranslationHeaders(text) {
+function stripTH(text){
   return text
-    .replace(/\[번역\/Translated\][^\n]*/gi, '')
-    .replace(/번역문이 추가되었습니다\.?/gi, '')
-    .replace(/Translation has been added\.?/gi, '')
-    .replace(/\[번역문\s*\/\s*Translation\]/gi, '')
-    .replace(/\[원문\s*\/\s*Original\]/gi, '')
-    .replace(/^---\s*$/gm, '')
-    .replace(/\n{3,}/g, '\n\n')
+    .replace(/\[번역\/Translated\][^\n]*/gi,'')
+    .replace(/번역문이 추가되었습니다\.?/gi,'')
+    .replace(/Translation has been added\.?/gi,'')
+    .replace(/\[번역문\s*\/\s*Translation\]/gi,'')
+    .replace(/\[원문\s*\/\s*Original\]/gi,'')
+    .replace(/^---\s*$/gm,'')
+    .replace(/\n{3,}/g,'\n\n')
     .trim();
 }
-
-// 회신창 본문 전체 HTML 생성
-function buildReplyHtml(subject, subjectTr, bodyTr, bodyOrig, includeQuoteHeader) {
-  const subjectLine = subjectTr || subject || '';
-  const mg = `font-family:'Malgun Gothic','맑은 고딕',sans-serif;font-size:11pt;color:#4472C4;`;
-  const mgb = mg + `font-weight:bold;`;
-  const plain = `font-family:'Malgun Gothic','맑은 고딕',sans-serif;font-size:11pt;`;
-
-  // 원문/번역문에서 이전 번역 헤더 제거
-  const cleanBodyTr = stripTranslationHeaders(bodyTr);
-  const cleanBodyOrig = stripTranslationHeaders(bodyOrig);
-
-  const parts = [];
-
-  // 1. 상단 헤더
-  parts.push(`<div style="${mg}">[번역/Translated] ${escHtml(subjectLine)}</div>`);
-  parts.push(`<div style="${mg}">&nbsp;</div>`);
-  parts.push(`<div style="${mg}">번역문이 추가되었습니다.</div>`);
-  parts.push(`<div style="${mg}">Translation has been added.</div>`);
-  parts.push(`<div>&nbsp;</div>`);
-
-  // 2. 인용 메일 헤더
-  if (includeQuoteHeader && originalEmailMeta) {
-    parts.push(`<div style="border-top:1px solid #ccc;padding-top:8px;"></div>`);
-    if (originalEmailMeta.from)     parts.push(`<div style="${plain}"><b>보낸 사람:</b> ${escHtml(originalEmailMeta.from)}</div>`);
-    if (originalEmailMeta.sentDate) parts.push(`<div style="${plain}"><b>보낸 날짜:</b> ${escHtml(originalEmailMeta.sentDate)}</div>`);
-    if (originalEmailMeta.to)       parts.push(`<div style="${plain}"><b>받는 사람:</b> ${escHtml(originalEmailMeta.to)}</div>`);
-    if (originalEmailMeta.cc)       parts.push(`<div style="${plain}"><b>참조:</b> ${escHtml(originalEmailMeta.cc)}</div>`);
-    if (originalEmailMeta.subject)  parts.push(`<div style="${plain}"><b>제목:</b> ${escHtml(originalEmailMeta.subject)}</div>`);
-    parts.push(`<div>&nbsp;</div>`);
-  }
-
-  // 3. [번역문 / Translation] 다음 번역 내용
-  parts.push(`<div style="${mgb}">[번역문 / Translation]</div>`);
-  parts.push(`<div>&nbsp;</div>`);
-  parts.push(`<div style="${plain}">${escHtml(cleanBodyTr)}</div>`);
-  parts.push(`<div>&nbsp;</div>`);
-  parts.push(`<div style="${plain}">---</div>`);
-  parts.push(`<div>&nbsp;</div>`);
-
-  // 4. [원문 / Original] 다음 원문 내용
-  parts.push(`<div style="${mgb}">[원문 / Original]</div>`);
-  parts.push(`<div>&nbsp;</div>`);
-  parts.push(`<div style="${plain}">${escHtml(cleanBodyOrig)}</div>`);
-
-  return `<html><body>${parts.join('')}</body></html>`;
-}
-
-// 읽기 모드: 새 회신 만들기
-function createFormattedReply() {
-  const { subject, subjectTr, bodyTr, bodyOrig } = getValues();
-  if (!bodyTr && !bodyOrig) { showStatus('본문 내용을 입력해주세요.', 'error'); return; }
-
-  showStatus('회신창을 여는 중...');
-
-  const fullHtml = buildReplyHtml(subject, subjectTr, bodyTr, bodyOrig, true);
-
-  // displayReplyAllForm with HTML body
-  Office.context.mailbox.item.displayReplyAllForm({
-    htmlBody: fullHtml
-  });
-
-  showStatus('회신창이 열렸어요! 받는 사람을 확인하고 보내세요.', 'success');
-}
-
-// 작성 모드: 현재 회신창에 삽입 (fallback)
-function insertIntoCompose() {
-  if (!isComposeMode) {
-    showStatus('회신 작성 화면에서만 사용할 수 있어요.', 'error');
-    return;
-  }
-  const { subject, subjectTr, bodyTr, bodyOrig } = getValues();
-  if (!bodyTr && !bodyOrig) { showStatus('본문 내용을 입력해주세요.', 'error'); return; }
-
-  // 작성 모드에서는 인용 헤더 없이 (이미 본문에 있을 것이므로)
-  const subjectLine = subjectTr || subject || '';
-  const mg = `font-family:'Malgun Gothic','맑은 고딕',sans-serif;font-size:11pt;color:#4472C4;`;
-  const mgb = mg + `font-weight:bold;`;
-  const plain = `font-family:'Malgun Gothic','맑은 고딕',sans-serif;font-size:11pt;`;
-
-  const topHeader = HEADER_START +
-    `<div style="${mg}">[번역/Translated] ${escHtml(subjectLine)}</div>` +
-    `<div style="${mg}">&nbsp;</div>` +
-    `<div style="${mg}">번역문이 추가되었습니다.</div>` +
-    `<div style="${mg}">Translation has been added.</div>` +
-    `<div>&nbsp;</div>` +
-    `<div style="${mgb}">[번역문 / Translation]</div>` +
-    `<div>&nbsp;</div>` +
-    `<div style="${plain}">${escHtml(bodyTr)}</div>` +
-    `<div>&nbsp;</div>` +
-    `<div style="${plain}">---</div>` +
-    `<div>&nbsp;</div>` +
-    `<div style="${mgb}">[원문 / Original]</div>` +
-    `<div>&nbsp;</div>` +
-    `<div style="${plain}">${escHtml(bodyOrig)}</div>` +
-    `<div>&nbsp;</div>` +
-    HEADER_END;
-
-  showStatus('삽입 중...');
-
-  Office.context.mailbox.item.body.getAsync(Office.CoercionType.Html, function(rGet) {
-    if (rGet.status !== Office.AsyncResultStatus.Succeeded) {
-      showStatus('본문 가져오기 실패: ' + (rGet.error?.message || ''), 'error');
-      return;
-    }
-    let currentBody = rGet.value || '';
-    // 이전 마커 영역 제거
-    const headerRegex = new RegExp(HEADER_START.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + '[\\s\\S]*?' + HEADER_END.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'), 'g');
-    currentBody = currentBody.replace(headerRegex, '');
-
-    let newBody;
-    if (/<body[^>]*>/i.test(currentBody)) {
-      newBody = currentBody.replace(/(<body[^>]*>)/i, '$1' + topHeader);
-    } else {
-      newBody = topHeader + currentBody;
-    }
-
-    Office.context.mailbox.item.body.setAsync(newBody, { coercionType: Office.CoercionType.Html }, function(rSet) {
-      if (rSet.status === Office.AsyncResultStatus.Succeeded) {
-        showStatus('삽입 완료!', 'success');
-      } else {
-        showStatus('삽입 실패: ' + (rSet.error?.message || ''), 'error');
-      }
-    });
-  });
-}
+function savePending(d){try{localStorage.setItem('th_pending',JSON.stringify(d));}catch(e){}}
+function getPending(){try{var d=localStorage.getItem('th_pending');return d?JSON.parse(d):null;}catch(e){return null;}}
+function clearPending(){try{localStorage.removeItem('th_pending');}catch(e){}}
+function clearPendingAndReset(){clearPending();hide('pending-box');hide('compose-insert-ui');show('banner-compose-empty');}
 </script>
 </body>
 </html>
