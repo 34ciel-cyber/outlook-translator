@@ -13,7 +13,7 @@
     .banner { font-size: 11px; padding: 7px 10px; border-radius: 5px; margin-bottom: 12px; line-height: 1.6; }
     .banner-read { border-left: 3px solid #4472C4; background: rgba(68,114,196,0.06); }
     .banner-compose { border-left: 3px solid #107c10; background: rgba(16,124,16,0.06); }
-    .settings-toggle { font-size: 11px; color: #888; cursor: pointer; text-decoration: underline; margin-bottom: 10px; display: block; }
+    .settings-toggle { font-size: 11px; color: #888; cursor: pointer; text-decoration: underline; margin-bottom: 10px; display: inline-block; }
     .settings-panel { background: #f7f7f7; border: 1px solid #e0e0e0; border-radius: 6px; padding: 10px; margin-bottom: 12px; }
     .settings-row { margin-bottom: 8px; }
     .settings-row:last-child { margin-bottom: 0; }
@@ -23,76 +23,73 @@
     .api-save-btn { font-size: 11px; font-weight: 600; padding: 5px 10px; border-radius: 5px; border: none; background: #4472C4; color: #fff; cursor: pointer; white-space: nowrap; }
     .key-status { font-size: 10px; margin-top: 3px; }
     .key-status.ok { color: #107c10; } .key-status.none { color: #aaa; }
-    .seg { display: flex; border: 1px solid #d0d0d0; border-radius: 6px; overflow: hidden; margin-bottom: 12px; }
-    .seg-btn { flex: 1; padding: 6px 0; font-size: 12px; font-weight: 600; cursor: pointer; border: none; background: #fff; color: #666; }
-    .seg-btn.active { background: #4472C4; color: #fff; }
-    .seg-btn:not(:last-child) { border-right: 1px solid #d0d0d0; }
-    .engine-row { display: flex; gap: 5px; margin-bottom: 10px; }
-    .engine-btn { flex: 1; padding: 5px 4px; font-size: 11px; font-weight: 600; border-radius: 5px; cursor: pointer; border: 1px solid #d0d0d0; background: #fff; color: #666; text-align: center; }
-    .engine-btn.active { background: #1f1f1f; color: #fff; border-color: #1f1f1f; }
     .lbl { font-size: 11px; font-weight: 600; color: #555; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; display: flex; align-items: center; gap: 5px; }
     .badge { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 10px; background: rgba(68,114,196,0.12); color: #4472C4; text-transform: none; letter-spacing: 0; }
     .badge-ok { background: rgba(16,124,16,0.12); color: #107c10; }
     .field { margin-bottom: 10px; }
-    input[type=text], input[type=password], textarea { width: 100%; font-family: 'Segoe UI', sans-serif; font-size: 12px; border: 1px solid #d0d0d0; border-radius: 5px; padding: 6px 8px; line-height: 1.5; resize: vertical; color: #1f1f1f; }
-    textarea { min-height: 70px; }
-    .dir-row { display: flex; gap: 6px; margin-bottom: 10px; }
-    .dir-btn { flex: 1; padding: 6px 0; font-size: 11px; font-weight: 600; border-radius: 5px; cursor: pointer; border: 1px solid #d0d0d0; background: #fff; color: #666; }
+    input[type=text], input[type=password], textarea, select { width: 100%; font-family: 'Segoe UI', sans-serif; font-size: 12px; border: 1px solid #d0d0d0; border-radius: 5px; padding: 6px 8px; line-height: 1.5; resize: vertical; color: #1f1f1f; }
+    textarea { min-height: 65px; }
+    .ai-row { display: flex; gap: 6px; margin-bottom: 4px; align-items: center; }
+    .ai-row select { flex: 1; height: 28px; padding: 0 6px; font-size: 11px; }
+    .ai-btn { font-size: 11px; font-weight: 600; padding: 5px 10px; border-radius: 5px; border: none; background: #1f1f1f; color: #fff; cursor: pointer; white-space: nowrap; }
+    .ai-btn:hover { opacity: 0.85; }
+    .ai-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .dir-row { display: flex; gap: 4px; margin-bottom: 8px; }
+    .dir-btn { flex: 1; padding: 5px 0; font-size: 11px; font-weight: 600; border-radius: 5px; cursor: pointer; border: 1px solid #d0d0d0; background: #fff; color: #666; }
     .dir-btn.active { background: #1f1f1f; color: #fff; border-color: #1f1f1f; }
-    .btn-primary { width: 100%; padding: 9px; font-size: 13px; font-weight: 600; cursor: pointer; border-radius: 6px; background: #4472C4; color: #fff; border: none; margin-bottom: 8px; }
-    .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
-    .btn-green { width: 100%; padding: 9px; font-size: 13px; font-weight: 600; cursor: pointer; border-radius: 6px; background: #107c10; color: #fff; border: none; margin-bottom: 8px; }
+    .btn-green { width: 100%; padding: 10px; font-size: 14px; font-weight: 600; cursor: pointer; border-radius: 6px; background: #107c10; color: #fff; border: none; transition: opacity 0.15s; }
+    .btn-green:hover { opacity: 0.88; }
     .btn-green:disabled { opacity: 0.4; cursor: not-allowed; }
     .btn-small { font-size: 11px; font-weight: 600; padding: 5px 10px; border-radius: 5px; border: 1px solid #d0d0d0; background: #fff; color: #555; cursor: pointer; }
-    .status { font-size: 11px; color: #888; text-align: center; padding: 4px 0 8px; word-break: break-word; }
-    .status.success { color: #107c10; } .status.error { color: #c00; padding: 6px 8px; background: #fef0f0; border-radius: 4px; border: 1px solid #f5c0c0; text-align: left; }
-    .ai-hint { font-size: 11px; color: #666; padding: 6px 8px; background: rgba(68,114,196,0.06); border-left: 2px solid #4472C4; border-radius: 3px; margin-bottom: 8px; line-height: 1.5; }
-    .edit-hint { font-size: 11px; color: #aaa; margin-top: 4px; }
+    .status { font-size: 11px; color: #888; text-align: center; padding: 6px 0; word-break: break-word; }
+    .status.success { color: #107c10; }
+    .status.error { color: #c00; padding: 6px 8px; background: #fef0f0; border-radius: 4px; border: 1px solid #f5c0c0; text-align: left; }
     .src-hint { font-size: 10px; color: #888; margin-bottom: 4px; line-height: 1.4; }
     .reload-row { display: flex; justify-content: flex-end; margin-top: 4px; }
     .pending-box { border: 1px solid #107c10; border-radius: 6px; padding: 10px 12px; background: rgba(16,124,16,0.05); margin-bottom: 12px; }
     .pending-title { font-size: 12px; font-weight: 600; color: #107c10; margin-bottom: 4px; }
     .pending-desc { font-size: 11px; color: #555; line-height: 1.5; }
     .hidden { display: none !important; }
+    .header-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+    .lang-mini { display: flex; gap: 4px; }
+    .lang-btn { font-size: 10px; font-weight: 600; padding: 3px 8px; border-radius: 4px; cursor: pointer; border: 1px solid #d0d0d0; background: #fff; color: #666; }
+    .lang-btn.active { background: #1f1f1f; color: #fff; border-color: #1f1f1f; }
   </style>
 </head>
 <body>
 <div class="format-tag"><span class="dot"></span>맑은 고딕 11pt · #4472C4</div>
 
 <div id="banner-read" class="banner banner-read hidden">
-  <b>받은 메일 모드</b> — 번역하고 <b>회신 만들기</b>를 누르면, 회신창이 열려요. 그 창에서 Translation Helper 버튼만 한 번 더 누르면 자동으로 포맷이 들어가요.
+  <b>받은 메일 모드</b> — 번역 후 <b>회신 만들기</b>를 누르면 회신창이 열려요. 회신창에서 패널 한 번만 다시 열면 자동 삽입돼요.
 </div>
 <div id="banner-compose-empty" class="banner banner-compose hidden">
-  <b>회신 작성 모드</b> — 받은 메일 화면에서 먼저 번역해주세요.
+  <b>회신 작성 모드</b> — 받은 메일에서 먼저 번역해주세요.
 </div>
 <div id="pending-box" class="pending-box hidden">
-  <div class="pending-title">번역 준비 완료 — 삽입 대기 중</div>
+  <div class="pending-title">번역 자동 삽입 중...</div>
   <div class="pending-desc" id="pending-desc"></div>
 </div>
 
-<span class="settings-toggle" onclick="toggleSettings()">API 키 설정</span>
+<span class="settings-toggle" onclick="toggleSettings()">⚙ API 키 설정</span>
 <div class="settings-panel hidden" id="settings-panel">
-  <!-- Claude -->
   <div class="settings-row">
-    <div class="settings-label">Claude (Anthropic)</div>
+    <div class="settings-label">Claude (Anthropic) — sk-ant-...</div>
     <div class="api-row">
       <input type="password" id="key-claude" placeholder="sk-ant-..." />
       <button class="api-save-btn" onclick="saveKey('claude')">저장</button>
     </div>
     <div class="key-status" id="status-claude"></div>
   </div>
-  <!-- DeepL -->
   <div class="settings-row">
-    <div class="settings-label">DeepL</div>
+    <div class="settings-label">DeepL — 무료 키는 끝에 :fx</div>
     <div class="api-row">
-      <input type="password" id="key-deepl" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx:fx" />
+      <input type="password" id="key-deepl" placeholder="xxxxxxxx-xxxx-xxxx:fx" />
       <button class="api-save-btn" onclick="saveKey('deepl')">저장</button>
     </div>
     <div class="key-status" id="status-deepl"></div>
   </div>
-  <!-- ChatGPT -->
   <div class="settings-row">
-    <div class="settings-label">ChatGPT (OpenAI)</div>
+    <div class="settings-label">ChatGPT (OpenAI) — sk-...</div>
     <div class="api-row">
       <input type="password" id="key-openai" placeholder="sk-..." />
       <button class="api-save-btn" onclick="saveKey('openai')">저장</button>
@@ -102,25 +99,11 @@
 </div>
 
 <div id="read-ui" class="hidden">
-  <div class="seg">
-    <button class="seg-btn active" id="mode-manual" onclick="setMode('manual')">직접 번역</button>
-    <button class="seg-btn" id="mode-ai" onclick="setMode('ai')">AI 초벌 번역</button>
-  </div>
-
-  <div id="panel-dir" class="hidden">
-    <div class="lbl" style="margin-bottom:4px;">번역 방향</div>
-    <div class="dir-row">
-      <button class="dir-btn active" id="btn-ko-en" onclick="setDir('ko-en')">한국어 → EN</button>
-      <button class="dir-btn" id="btn-en-ko" onclick="setDir('en-ko')">EN → 한국어</button>
-    </div>
-  </div>
-
-  <div id="engine-section" class="hidden">
-    <div class="lbl" style="margin-bottom:4px;">번역 엔진</div>
-    <div class="engine-row">
-      <button class="engine-btn active" id="eng-claude" onclick="setEngine('claude')">Claude</button>
-      <button class="engine-btn" id="eng-deepl" onclick="setEngine('deepl')">DeepL</button>
-      <button class="engine-btn" id="eng-openai" onclick="setEngine('openai')">ChatGPT</button>
+  <div class="header-line">
+    <div class="lbl" style="margin:0;">번역 방향</div>
+    <div class="lang-mini">
+      <button class="lang-btn active" id="btn-ko-en" onclick="setDir('ko-en')">KO → EN</button>
+      <button class="lang-btn" id="btn-en-ko" onclick="setDir('en-ko')">EN → KO</button>
     </div>
   </div>
 
@@ -128,65 +111,51 @@
     <div class="lbl">메일 제목 <span class="badge">원문</span></div>
     <input type="text" id="subject" placeholder="자동 입력됨" />
   </div>
-  <div class="field hidden" id="subject-tr-wrap">
-    <div class="lbl">번역된 제목</div>
-    <input type="text" id="subject-translated" placeholder="번역된 제목" />
+
+  <div class="field">
+    <div class="lbl">번역된 제목 <span class="badge" id="subj-tr-badge">선택</span></div>
+    <input type="text" id="subject-translated" placeholder="비워두면 원문 제목 사용" />
   </div>
 
-  <div id="panel-manual">
-    <div class="field">
-      <div class="lbl">번역문 본문</div>
-      <textarea id="body-tr-manual" placeholder="번역된 본문을 붙여넣으세요."></textarea>
-    </div>
-    <div class="field">
-      <div class="lbl">원문 본문 <span class="badge" id="src-badge-manual">자동</span></div>
-      <div class="src-hint">텍스트 선택 시 그 부분, 아니면 가장 최근 메일 본문이 들어와요.</div>
-      <textarea id="body-orig-manual" placeholder="원문 본문 (자동 입력됨)"></textarea>
-      <div class="reload-row"><button class="btn-small" onclick="reloadSource()">다시 불러오기</button></div>
-    </div>
+  <div class="field">
+    <div class="lbl">원문 본문 <span class="badge" id="src-badge">자동</span></div>
+    <div class="src-hint">메일에서 텍스트 선택 시 그 부분, 안 하면 가장 최근 메일 본문이 들어와요.</div>
+    <textarea id="body-orig" placeholder="원문 본문"></textarea>
+    <div class="reload-row"><button class="btn-small" onclick="reloadSource()">↻ 다시 불러오기</button></div>
   </div>
 
-  <div id="panel-ai" class="hidden">
-    <div class="field">
-      <div class="lbl">원문 본문 <span class="badge" id="src-badge-ai">자동</span></div>
-      <div class="src-hint">텍스트 선택 시 그 부분, 아니면 가장 최근 메일 본문이 들어와요.</div>
-      <textarea id="body-orig-ai" placeholder="원문 본문 (자동 입력됨)"></textarea>
-      <div class="reload-row"><button class="btn-small" onclick="reloadSource()">다시 불러오기</button></div>
+  <div class="field">
+    <div class="lbl">번역문 본문 <span class="badge">필수</span></div>
+    <div class="ai-row">
+      <select id="engine-select">
+        <option value="claude">Claude</option>
+        <option value="deepl">DeepL</option>
+        <option value="openai">ChatGPT</option>
+      </select>
+      <button class="ai-btn" id="ai-btn" onclick="runAI()">AI 자동 번역 ↗</button>
     </div>
-    <button class="btn-primary" id="ai-btn" onclick="runAI()">초벌 번역</button>
-    <div id="ai-result-field" class="hidden">
-      <div class="field" style="margin-top:8px;">
-        <div class="lbl">초벌 번역 결과 <span class="badge">수정 가능</span></div>
-        <textarea id="body-tr-ai" style="min-height:80px;"></textarea>
-        <div class="edit-hint">수정 후 회신 만들기를 누르세요.</div>
-      </div>
-    </div>
+    <textarea id="body-tr" placeholder="번역문을 직접 입력하거나 위 버튼으로 AI 자동 번역"></textarea>
   </div>
 
   <div id="status-msg" class="status hidden"></div>
-  <button class="btn-green" onclick="createReply()">회신 만들기</button>
+  <button class="btn-green" onclick="createReply()">📧 회신 만들기</button>
 </div>
 
-<div id="compose-insert-ui" class="hidden">
-  <div id="status-msg-compose" class="status hidden"></div>
-</div>
+<div id="compose-status" class="status hidden"></div>
 
 <script>
-var mode='manual', direction='ko-en', engine='claude', isComposeMode=false;
+var direction='ko-en', isComposeMode=false;
 function show(id){document.getElementById(id).classList.remove('hidden');}
 function hide(id){document.getElementById(id).classList.add('hidden');}
 
-// ── API 키 관리 ──────────────────────────────────────────
 var KEY_MAP={claude:'anthropic_api_key', deepl:'deepl_api_key', openai:'openai_api_key'};
 function loadAllKeys(){
   ['claude','deepl','openai'].forEach(function(eng){
     var k=localStorage.getItem(KEY_MAP[eng])||'';
     var el=document.getElementById('status-'+eng);
-    if(k){
-      document.getElementById('key-'+eng).value=k;
-      el.textContent='키 저장됨'; el.className='key-status ok';
-    } else {
-      el.textContent='키 없음'; el.className='key-status none';
+    if(el){
+      if(k){document.getElementById('key-'+eng).value=k;el.textContent='✓ 키 저장됨';el.className='key-status ok';}
+      else{el.textContent='키 없음';el.className='key-status none';}
     }
   });
 }
@@ -194,13 +163,12 @@ function saveKey(eng){
   var k=document.getElementById('key-'+eng).value.trim();
   var el=document.getElementById('status-'+eng);
   try{
-    if(k){localStorage.setItem(KEY_MAP[eng],k);el.textContent='저장됐습니다!';el.className='key-status ok';}
-    else{localStorage.removeItem(KEY_MAP[eng]);el.textContent='삭제됐습니다.';el.className='key-status none';}
+    if(k){localStorage.setItem(KEY_MAP[eng],k);el.textContent='✓ 저장됐습니다';el.className='key-status ok';}
+    else{localStorage.removeItem(KEY_MAP[eng]);el.textContent='삭제됐습니다';el.className='key-status none';}
   }catch(e){el.textContent='저장 실패';el.className='key-status none';}
 }
 function toggleSettings(){document.getElementById('settings-panel').classList.toggle('hidden');}
 
-// ── Office 초기화 ────────────────────────────────────────
 Office.onReady(function(info){
   loadAllKeys();
   if(info.host!==Office.HostType.Outlook) return;
@@ -210,9 +178,8 @@ Office.onReady(function(info){
     var pending=getPending();
     if(pending){
       show('pending-box');
-      document.getElementById('pending-desc').textContent='제목: '+pending.subjectLine+' — 자동 삽입 중...';
-      // 자동 삽입 (사용자가 버튼 누를 필요 없음)
-      setTimeout(function(){ autoInsert(); }, 500);
+      document.getElementById('pending-desc').textContent='제목: '+pending.subjectLine;
+      setTimeout(function(){ autoInsert(); }, 400);
     } else {
       show('banner-compose-empty');
     }
@@ -221,15 +188,17 @@ Office.onReady(function(info){
     show('read-ui');
     document.getElementById('subject').value=(item.subject||'').replace(/^(RE:\s*|\[EXT\]\s*|Fw:\s*)+/gi,'').trim();
     reloadSource();
+    // 기본 엔진을 키 있는 것 중 첫 번째로 설정
+    var engineSelect=document.getElementById('engine-select');
+    if(localStorage.getItem(KEY_MAP.claude)) engineSelect.value='claude';
+    else if(localStorage.getItem(KEY_MAP.deepl)) engineSelect.value='deepl';
+    else if(localStorage.getItem(KEY_MAP.openai)) engineSelect.value='openai';
   }
 });
 
-// ── 원문 불러오기 ────────────────────────────────────────
 function setSrcBadge(label,ok){
-  ['src-badge-manual','src-badge-ai'].forEach(function(id){
-    var el=document.getElementById(id);
-    if(el){el.textContent=label;el.className=ok?'badge badge-ok':'badge';}
-  });
+  var el=document.getElementById('src-badge');
+  if(el){el.textContent=label;el.className=ok?'badge badge-ok':'badge';}
 }
 function reloadSource(){
   var item=Office.context.mailbox.item;
@@ -237,21 +206,18 @@ function reloadSource(){
   if(item.getSelectedDataAsync){
     item.getSelectedDataAsync(Office.CoercionType.Text,function(r){
       if(r.status===Office.AsyncResultStatus.Succeeded&&r.value&&r.value.data&&r.value.data.trim()){
-        setOrig(r.value.data.trim(),'선택한 부분');
+        document.getElementById('body-orig').value=r.value.data.trim();
+        setSrcBadge('선택한 부분',true);
       } else { extractBody(); }
     });
   } else { extractBody(); }
 }
 function extractBody(){
   Office.context.mailbox.item.body.getAsync(Office.CoercionType.Text,function(r){
-    if(r.status!==Office.AsyncResultStatus.Succeeded){setSrcBadge('불러오기 실패',false);return;}
-    setOrig(extractLatest(r.value||''),'가장 최근 메일');
+    if(r.status!==Office.AsyncResultStatus.Succeeded){setSrcBadge('실패',false);return;}
+    document.getElementById('body-orig').value=extractLatest(r.value||'');
+    setSrcBadge('자동 입력',true);
   });
-}
-function setOrig(text,label){
-  document.getElementById('body-orig-manual').value=text;
-  document.getElementById('body-orig-ai').value=text;
-  setSrcBadge(label,true);
 }
 function extractLatest(text){
   var lines=text.split('\n');
@@ -270,37 +236,21 @@ function extractLatest(text){
   return lines.slice(start,end).filter(function(l){return!l.match(/번역\s*부탁드립니다|Please\s*translate/i);}).join('\n').trim();
 }
 
-// ── 모드 / 방향 / 엔진 ───────────────────────────────────
-function setMode(m){
-  mode=m;
-  document.getElementById('mode-manual').classList.toggle('active',m==='manual');
-  document.getElementById('mode-ai').classList.toggle('active',m==='ai');
-  if(m==='manual'){show('panel-manual');hide('panel-ai');hide('panel-dir');hide('engine-section');show('subject-tr-wrap');}
-  else{hide('panel-manual');show('panel-ai');show('panel-dir');show('engine-section');hide('subject-tr-wrap');}
-}
 function setDir(d){
   direction=d;
   document.getElementById('btn-ko-en').classList.toggle('active',d==='ko-en');
   document.getElementById('btn-en-ko').classList.toggle('active',d==='en-ko');
 }
-function setEngine(e){
-  engine=e;
-  ['claude','deepl','openai'].forEach(function(eng){
-    document.getElementById('eng-'+eng).classList.toggle('active',eng===e);
-  });
-  var labels={claude:'Claude 초벌 번역', deepl:'DeepL 초벌 번역', openai:'ChatGPT 초벌 번역'};
-  document.getElementById('ai-btn').textContent=labels[e];
-}
 
-// ── AI 번역 ──────────────────────────────────────────────
 function runAI(){
+  var engine=document.getElementById('engine-select').value;
   var key=localStorage.getItem(KEY_MAP[engine])||'';
   if(!key){
-    showStatus(engine+' API 키가 없어요. 상단 API 키 설정을 눌러 입력해주세요.','error');
+    showStatus(engine.toUpperCase()+' API 키가 없어요. ⚙ API 키 설정에서 입력해주세요.','error');
     show('settings-panel'); return;
   }
   var subject=document.getElementById('subject').value.trim();
-  var body=document.getElementById('body-orig-ai').value.trim();
+  var body=document.getElementById('body-orig').value.trim();
   if(!body){showStatus('원문 본문을 입력해주세요.','error');return;}
 
   var btn=document.getElementById('ai-btn');
@@ -313,29 +263,22 @@ function runAI(){
   var tgtCode=direction==='ko-en'?'EN':'KO';
 
   var promise;
-  if(engine==='claude'){
-    promise=translateClaude(key,subject,body,srcLang,tgtLang);
-  } else if(engine==='deepl'){
-    promise=translateDeepl(key,subject,body,srcCode,tgtCode);
-  } else {
-    promise=translateOpenAI(key,subject,body,srcLang,tgtLang);
-  }
+  if(engine==='claude') promise=trClaude(key,subject,body,srcLang,tgtLang);
+  else if(engine==='deepl') promise=trDeepl(key,subject,body,srcCode,tgtCode);
+  else promise=trOpenAI(key,subject,body,srcLang,tgtLang);
 
   promise.then(function(result){
     if(result.translatedSubject) document.getElementById('subject-translated').value=result.translatedSubject;
-    document.getElementById('body-tr-ai').value=result.translatedBody||'';
-    show('ai-result-field');
-    showStatus('번역 완료! 회신 만들기를 누르세요.','success');
+    document.getElementById('body-tr').value=result.translatedBody||'';
+    showStatus('✓ 번역 완료. 회신 만들기를 누르세요.','success');
   }).catch(function(e){
     showStatus('번역 오류: '+e.message,'error');
   }).finally(function(){
-    btn.disabled=false;
-    var labels={claude:'Claude 초벌 번역', deepl:'DeepL 초벌 번역', openai:'ChatGPT 초벌 번역'};
-    btn.textContent=labels[engine];
+    btn.disabled=false; btn.textContent='AI 자동 번역 ↗';
   });
 }
 
-function translateClaude(key,subject,body,srcLang,tgtLang){
+function trClaude(key,subject,body,srcLang,tgtLang){
   return fetch('https://api.anthropic.com/v1/messages',{
     method:'POST',
     headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
@@ -349,15 +292,11 @@ function translateClaude(key,subject,body,srcLang,tgtLang){
     return JSON.parse(raw.replace(/```json|```/g,'').trim());
   });});
 }
-
-function translateDeepl(key,subject,body,srcCode,tgtCode){
-  // DeepL은 subject와 body를 각각 번역 요청 (배열로 한번에)
+function trDeepl(key,subject,body,srcCode,tgtCode){
   var texts=[body];
   if(subject) texts.unshift(subject);
-
   var isFree=key.indexOf(':fx')!==-1;
   var endpoint=isFree?'https://api-free.deepl.com/v2/translate':'https://api.deepl.com/v2/translate';
-
   return fetch(endpoint,{
     method:'POST',
     headers:{'Authorization':'DeepL-Auth-Key '+key,'Content-Type':'application/json'},
@@ -366,15 +305,11 @@ function translateDeepl(key,subject,body,srcCode,tgtCode){
     if(!r.ok){var e=JSON.parse(t);throw new Error(e.message||'DeepL HTTP '+r.status);}
     var data=JSON.parse(t);
     var translations=data.translations.map(function(x){return x.text;});
-    if(subject){
-      return {translatedSubject:translations[0], translatedBody:translations[1]||''};
-    } else {
-      return {translatedSubject:'', translatedBody:translations[0]||''};
-    }
+    if(subject) return {translatedSubject:translations[0], translatedBody:translations[1]||''};
+    return {translatedSubject:'', translatedBody:translations[0]||''};
   });});
 }
-
-function translateOpenAI(key,subject,body,srcLang,tgtLang){
+function trOpenAI(key,subject,body,srcLang,tgtLang){
   return fetch('https://api.openai.com/v1/chat/completions',{
     method:'POST',
     headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
@@ -397,25 +332,22 @@ function showStatus(msg,type){
   if(type==='success') setTimeout(function(){el.classList.add('hidden');},4000);
 }
 function showStatusCompose(msg,type){
-  var el=document.getElementById('status-msg-compose');
+  var el=document.getElementById('compose-status');
   el.textContent=msg;el.className='status'+(type?' '+type:'');el.classList.remove('hidden');
-  if(type==='success') setTimeout(function(){el.classList.add('hidden');},4000);
 }
 
-// ── 회신 만들기 ──────────────────────────────────────────
 function createReply(){
   var subject=document.getElementById('subject').value.trim();
   var subjectTr=document.getElementById('subject-translated').value.trim();
-  var bodyTr=mode==='manual'?document.getElementById('body-tr-manual').value.trim():document.getElementById('body-tr-ai').value.trim();
-  var bodyOrig=mode==='manual'?document.getElementById('body-orig-manual').value.trim():document.getElementById('body-orig-ai').value.trim();
-  if(!bodyTr){showStatus('번역문 본문을 입력해주세요.','error');return;}
+  var bodyTr=document.getElementById('body-tr').value.trim();
+  var bodyOrig=document.getElementById('body-orig').value.trim();
+  if(!bodyTr){showStatus('번역문 본문을 입력하거나 AI 자동 번역을 눌러주세요.','error');return;}
   var subjectLine=subjectTr||subject||'';
   savePending({subjectLine:subjectLine, bodyTr:stripTH(bodyTr), bodyOrig:stripTH(bodyOrig)});
   Office.context.mailbox.item.displayReplyAllForm({});
-  showStatus('회신창이 열렸어요. 그 창에서 Translation Helper를 열면 자동으로 들어가요.','success');
+  showStatus('✓ 회신창이 열렸어요. 패널을 다시 한 번만 열면 자동 삽입돼요.','success');
 }
 
-// ── 번역 삽입 ────────────────────────────────────────────
 function autoInsert(){
   var pending=getPending();
   if(!pending){show('banner-compose-empty');hide('pending-box');return;}
@@ -428,7 +360,7 @@ function autoInsert(){
     Office.context.mailbox.item.body.setAsync(newHtml,{coercionType:Office.CoercionType.Html},function(rSet){
       if(rSet.status===Office.AsyncResultStatus.Succeeded){
         clearPending();
-        document.getElementById('pending-desc').innerHTML='✅ 자동 삽입 완료! 회신창을 확인하세요.';
+        document.getElementById('pending-desc').innerHTML='✅ 자동 삽입 완료! 회신창을 확인하고 보내세요.';
       } else {
         document.getElementById('pending-desc').textContent='삽입 실패: '+(rSet.error&&rSet.error.message||'')+'. 다시 시도하려면 패널을 닫았다 여세요.';
       }
@@ -436,18 +368,16 @@ function autoInsert(){
   });
 }
 
-function insertPendingTranslation(){ autoInsert(); }
-
 function buildHtml(currentHtml,subjectLine,bodyTr,bodyOrig){
   var mg='font-family:\'Malgun Gothic\',\'맑은 고딕\',sans-serif;font-size:11pt;color:#4472C4;';
   var mgb='font-family:\'Malgun Gothic\',\'맑은 고딕\',sans-serif;font-size:11pt;color:#4472C4;font-weight:bold;';
   var plain='font-family:\'Malgun Gothic\',\'맑은 고딕\',sans-serif;font-size:11pt;';
   var topHeader=
     '<div style="'+mg+'">[번역/Translated] '+esc(subjectLine)+'</div>'+
-    '<br>'+
+    '<div>&nbsp;</div>'+
     '<div style="'+mg+'">번역문이 추가되었습니다.</div>'+
     '<div style="'+mg+'">Translation has been added.</div>'+
-    '<br>';
+    '<div>&nbsp;</div>';
   var translationSection=
     '<div>&nbsp;</div>'+
     '<div style="'+mgb+'">[번역문 / Translation]</div>'+
@@ -488,7 +418,6 @@ function stripTH(text){
 function savePending(d){try{localStorage.setItem('th_pending',JSON.stringify(d));}catch(e){}}
 function getPending(){try{var d=localStorage.getItem('th_pending');return d?JSON.parse(d):null;}catch(e){return null;}}
 function clearPending(){try{localStorage.removeItem('th_pending');}catch(e){}}
-function clearPendingAndReset(){clearPending();hide('pending-box');hide('compose-insert-ui');show('banner-compose-empty');}
 </script>
 </body>
 </html>
