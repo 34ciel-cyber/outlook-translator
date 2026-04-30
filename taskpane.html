@@ -26,6 +26,7 @@
     .lbl { font-size: 11px; font-weight: 600; color: #555; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; display: flex; align-items: center; gap: 5px; }
     .badge { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 10px; background: rgba(68,114,196,0.12); color: #4472C4; text-transform: none; letter-spacing: 0; }
     .badge-ok { background: rgba(16,124,16,0.12); color: #107c10; }
+    .badge-auto { background: rgba(170,120,0,0.12); color: #aa7800; }
     .field { margin-bottom: 10px; }
     input[type=text], input[type=password], textarea, select { width: 100%; font-family: 'Segoe UI', sans-serif; font-size: 12px; border: 1px solid #d0d0d0; border-radius: 5px; padding: 6px 8px; line-height: 1.5; resize: vertical; color: #1f1f1f; }
     textarea { min-height: 65px; }
@@ -34,9 +35,6 @@
     .ai-btn { font-size: 11px; font-weight: 600; padding: 5px 10px; border-radius: 5px; border: none; background: #1f1f1f; color: #fff; cursor: pointer; white-space: nowrap; }
     .ai-btn:hover { opacity: 0.85; }
     .ai-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-    .dir-row { display: flex; gap: 4px; margin-bottom: 8px; }
-    .dir-btn { flex: 1; padding: 5px 0; font-size: 11px; font-weight: 600; border-radius: 5px; cursor: pointer; border: 1px solid #d0d0d0; background: #fff; color: #666; }
-    .dir-btn.active { background: #1f1f1f; color: #fff; border-color: #1f1f1f; }
     .btn-green { width: 100%; padding: 10px; font-size: 14px; font-weight: 600; cursor: pointer; border-radius: 6px; background: #107c10; color: #fff; border: none; transition: opacity 0.15s; }
     .btn-green:hover { opacity: 0.88; }
     .btn-green:disabled { opacity: 0.4; cursor: not-allowed; }
@@ -51,16 +49,18 @@
     .pending-desc { font-size: 11px; color: #555; line-height: 1.5; }
     .hidden { display: none !important; }
     .header-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
-    .lang-mini { display: flex; gap: 4px; }
+    .lang-mini { display: flex; gap: 4px; align-items: center; }
     .lang-btn { font-size: 10px; font-weight: 600; padding: 3px 8px; border-radius: 4px; cursor: pointer; border: 1px solid #d0d0d0; background: #fff; color: #666; }
     .lang-btn.active { background: #1f1f1f; color: #fff; border-color: #1f1f1f; }
+    .auto-tag { font-size: 9px; color: #aa7800; margin-left: 4px; }
+    kbd { font-family: 'Segoe UI', sans-serif; font-size: 10px; padding: 1px 4px; border: 1px solid #ccc; border-radius: 3px; background: #f5f5f5; color: #555; }
   </style>
 </head>
 <body>
 <div class="format-tag"><span class="dot"></span>맑은 고딕 11pt · #4472C4</div>
 
 <div id="banner-read" class="banner banner-read hidden">
-  <b>받은 메일 모드</b> — 번역 후 <b>회신 만들기</b>를 누르면 회신창이 열려요. 회신창에서 패널 한 번만 다시 열면 자동 삽입돼요.
+  <b>받은 메일 모드</b> — 번역 후 <b>회신 만들기</b>를 누르면 회신창이 열려요. <kbd>Ctrl</kbd>+<kbd>Enter</kbd>로 빠르게 번역, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Enter</kbd>로 회신 만들기.
 </div>
 <div id="banner-compose-empty" class="banner banner-compose hidden">
   <b>회신 작성 모드</b> — 받은 메일에서 먼저 번역해주세요.
@@ -81,14 +81,6 @@
     <div class="key-status" id="status-claude"></div>
   </div>
   <div class="settings-row">
-    <div class="settings-label">DeepL — 무료 키는 끝에 :fx</div>
-    <div class="api-row">
-      <input type="password" id="key-deepl" placeholder="xxxxxxxx-xxxx-xxxx:fx" />
-      <button class="api-save-btn" onclick="saveKey('deepl')">저장</button>
-    </div>
-    <div class="key-status" id="status-deepl"></div>
-  </div>
-  <div class="settings-row">
     <div class="settings-label">ChatGPT (OpenAI) — sk-...</div>
     <div class="api-row">
       <input type="password" id="key-openai" placeholder="sk-..." />
@@ -100,10 +92,10 @@
 
 <div id="read-ui" class="hidden">
   <div class="header-line">
-    <div class="lbl" style="margin:0;">번역 방향</div>
+    <div class="lbl" style="margin:0;">번역 방향 <span class="auto-tag" id="auto-tag">(자동 감지)</span></div>
     <div class="lang-mini">
-      <button class="lang-btn active" id="btn-ko-en" onclick="setDir('ko-en')">KO → EN</button>
-      <button class="lang-btn" id="btn-en-ko" onclick="setDir('en-ko')">EN → KO</button>
+      <button class="lang-btn active" id="btn-ko-en" onclick="setDir('ko-en', true)">KO → EN</button>
+      <button class="lang-btn" id="btn-en-ko" onclick="setDir('en-ko', true)">EN → KO</button>
     </div>
   </div>
 
@@ -120,7 +112,7 @@
   <div class="field">
     <div class="lbl">원문 본문 <span class="badge" id="src-badge">자동</span></div>
     <div class="src-hint">메일에서 텍스트 선택 시 그 부분, 안 하면 가장 최근 메일 본문이 들어와요.</div>
-    <textarea id="body-orig" placeholder="원문 본문"></textarea>
+    <textarea id="body-orig" placeholder="원문 본문" oninput="onOrigChange()"></textarea>
     <div class="reload-row"><button class="btn-small" onclick="reloadSource()">↻ 다시 불러오기</button></div>
   </div>
 
@@ -129,7 +121,6 @@
     <div class="ai-row">
       <select id="engine-select">
         <option value="claude">Claude</option>
-        <option value="deepl">DeepL</option>
         <option value="openai">ChatGPT</option>
       </select>
       <button class="ai-btn" id="ai-btn" onclick="runAI()">AI 자동 번역 ↗</button>
@@ -138,19 +129,19 @@
   </div>
 
   <div id="status-msg" class="status hidden"></div>
-  <button class="btn-green" onclick="createReply()">📧 회신 만들기</button>
+  <button class="btn-green" id="create-btn" onclick="createReply()">📧 회신 만들기</button>
 </div>
 
 <div id="compose-status" class="status hidden"></div>
 
 <script>
-var direction='ko-en', isComposeMode=false;
+var direction='ko-en', isComposeMode=false, dirManuallySet=false;
 function show(id){document.getElementById(id).classList.remove('hidden');}
 function hide(id){document.getElementById(id).classList.add('hidden');}
 
-var KEY_MAP={claude:'anthropic_api_key', deepl:'deepl_api_key', openai:'openai_api_key'};
+var KEY_MAP={claude:'anthropic_api_key', openai:'openai_api_key'};
 function loadAllKeys(){
-  ['claude','deepl','openai'].forEach(function(eng){
+  ['claude','openai'].forEach(function(eng){
     var k=localStorage.getItem(KEY_MAP[eng])||'';
     var el=document.getElementById('status-'+eng);
     if(el){
@@ -168,6 +159,30 @@ function saveKey(eng){
   }catch(e){el.textContent='저장 실패';el.className='key-status none';}
 }
 function toggleSettings(){document.getElementById('settings-panel').classList.toggle('hidden');}
+
+// ── 언어 자동 감지 ──────────────────────────────────────
+function detectLanguage(text){
+  if(!text || !text.trim()) return null;
+  // 한글 문자 비율로 판단
+  var koreanChars = (text.match(/[\u3131-\u3163\uac00-\ud7a3]/g) || []).length;
+  var totalChars = text.replace(/\s/g, '').length;
+  if (totalChars === 0) return null;
+  var koreanRatio = koreanChars / totalChars;
+  return koreanRatio > 0.3 ? 'ko' : 'en';
+}
+
+function autoDetectAndSetDir(text){
+  if (dirManuallySet) return; // 수동 설정 후엔 자동 감지 안 함
+  var lang = detectLanguage(text);
+  if (!lang) return;
+  if (lang === 'ko') setDir('ko-en', false);
+  else setDir('en-ko', false);
+}
+
+function onOrigChange(){
+  var text = document.getElementById('body-orig').value;
+  autoDetectAndSetDir(text);
+}
 
 Office.onReady(function(info){
   loadAllKeys();
@@ -188,11 +203,22 @@ Office.onReady(function(info){
     show('read-ui');
     document.getElementById('subject').value=(item.subject||'').replace(/^(RE:\s*|\[EXT\]\s*|Fw:\s*)+/gi,'').trim();
     reloadSource();
-    // 기본 엔진을 키 있는 것 중 첫 번째로 설정
     var engineSelect=document.getElementById('engine-select');
     if(localStorage.getItem(KEY_MAP.claude)) engineSelect.value='claude';
-    else if(localStorage.getItem(KEY_MAP.deepl)) engineSelect.value='deepl';
     else if(localStorage.getItem(KEY_MAP.openai)) engineSelect.value='openai';
+    
+    // 키보드 단축키
+    document.addEventListener('keydown', function(e){
+      if(e.ctrlKey && e.key === 'Enter'){
+        if(e.shiftKey){
+          e.preventDefault();
+          createReply();
+        } else {
+          e.preventDefault();
+          runAI();
+        }
+      }
+    });
   }
 });
 
@@ -208,6 +234,7 @@ function reloadSource(){
       if(r.status===Office.AsyncResultStatus.Succeeded&&r.value&&r.value.data&&r.value.data.trim()){
         document.getElementById('body-orig').value=r.value.data.trim();
         setSrcBadge('선택한 부분',true);
+        autoDetectAndSetDir(r.value.data);
       } else { extractBody(); }
     });
   } else { extractBody(); }
@@ -215,8 +242,10 @@ function reloadSource(){
 function extractBody(){
   Office.context.mailbox.item.body.getAsync(Office.CoercionType.Text,function(r){
     if(r.status!==Office.AsyncResultStatus.Succeeded){setSrcBadge('실패',false);return;}
-    document.getElementById('body-orig').value=extractLatest(r.value||'');
+    var text = extractLatest(r.value||'');
+    document.getElementById('body-orig').value=text;
     setSrcBadge('자동 입력',true);
+    autoDetectAndSetDir(text);
   });
 }
 function extractLatest(text){
@@ -236,10 +265,15 @@ function extractLatest(text){
   return lines.slice(start,end).filter(function(l){return!l.match(/번역\s*부탁드립니다|Please\s*translate/i);}).join('\n').trim();
 }
 
-function setDir(d){
+function setDir(d, isManual){
   direction=d;
   document.getElementById('btn-ko-en').classList.toggle('active',d==='ko-en');
   document.getElementById('btn-en-ko').classList.toggle('active',d==='en-ko');
+  if(isManual){
+    dirManuallySet = true;
+    var tag = document.getElementById('auto-tag');
+    if(tag) tag.textContent = '(수동)';
+  }
 }
 
 function runAI(){
@@ -259,12 +293,9 @@ function runAI(){
 
   var srcLang=direction==='ko-en'?'Korean':'English';
   var tgtLang=direction==='ko-en'?'English':'Korean';
-  var srcCode=direction==='ko-en'?'KO':'EN';
-  var tgtCode=direction==='ko-en'?'EN':'KO';
 
   var promise;
   if(engine==='claude') promise=trClaude(key,subject,body,srcLang,tgtLang);
-  else if(engine==='deepl') promise=trDeepl(key,subject,body,srcCode,tgtCode);
   else promise=trOpenAI(key,subject,body,srcLang,tgtLang);
 
   promise.then(function(result){
@@ -292,23 +323,6 @@ function trClaude(key,subject,body,srcLang,tgtLang){
     return JSON.parse(raw.replace(/```json|```/g,'').trim());
   });});
 }
-function trDeepl(key,subject,body,srcCode,tgtCode){
-  var texts=[body];
-  if(subject) texts.unshift(subject);
-  var isFree=key.indexOf(':fx')!==-1;
-  var endpoint=isFree?'https://api-free.deepl.com/v2/translate':'https://api.deepl.com/v2/translate';
-  return fetch(endpoint,{
-    method:'POST',
-    headers:{'Authorization':'DeepL-Auth-Key '+key,'Content-Type':'application/json'},
-    body:JSON.stringify({text:texts,source_lang:srcCode,target_lang:tgtCode==='EN'?'EN-US':tgtCode})
-  }).then(function(r){return r.text().then(function(t){
-    if(!r.ok){var e=JSON.parse(t);throw new Error(e.message||'DeepL HTTP '+r.status);}
-    var data=JSON.parse(t);
-    var translations=data.translations.map(function(x){return x.text;});
-    if(subject) return {translatedSubject:translations[0], translatedBody:translations[1]||''};
-    return {translatedSubject:'', translatedBody:translations[0]||''};
-  });});
-}
 function trOpenAI(key,subject,body,srcLang,tgtLang){
   return fetch('https://api.openai.com/v1/chat/completions',{
     method:'POST',
@@ -330,10 +344,6 @@ function showStatus(msg,type){
   var el=document.getElementById('status-msg');
   el.textContent=msg;el.className='status'+(type?' '+type:'');el.classList.remove('hidden');
   if(type==='success') setTimeout(function(){el.classList.add('hidden');},4000);
-}
-function showStatusCompose(msg,type){
-  var el=document.getElementById('compose-status');
-  el.textContent=msg;el.className='status'+(type?' '+type:'');el.classList.remove('hidden');
 }
 
 function createReply(){
