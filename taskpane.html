@@ -642,10 +642,11 @@ function createReply(){
   var bodyTr=document.getElementById('body-tr').value.trim();
   var bodyOrig=document.getElementById('body-orig').value.trim();
   var isHtmlMode = document.getElementById('format-mode').checked;
-  if(!bodyTr){showStatus('번역문 본문을 입력하거나 AI 자동 번역을 눌러주세요.','error');return;}
+  // 번역문 없으면 원문만 삽입 (번역 없이 원문만 회신)
+  var origOnlyMode = !bodyTr;
   var subjectLine=subjectTr||subject||'';
   var isInterleave = document.getElementById('interleave-mode').checked;
-  savePending({subjectLine:subjectLine, bodyTr:stripTH(bodyTr), bodyOrig:stripTH(bodyOrig), isHtml: isHtmlMode, isInterleave: isInterleave});
+  savePending({subjectLine:subjectLine, bodyTr:stripTH(bodyTr), bodyOrig:stripTH(bodyOrig), isHtml: isHtmlMode, isInterleave: isInterleave, origOnly: origOnlyMode});
   Office.context.mailbox.item.displayReplyAllForm({});
   showStatus('✓ 회신창이 열렸어요. 패널을 다시 한 번만 열면 자동 삽입돼요.','success');
 }
@@ -735,19 +736,28 @@ function buildHtml(currentHtml,subjectLine,bodyTr,bodyOrig){
     }
     translationSection = parts.join('');
   } else {
-    // 기존 방식: 번역문 통째 + --- + 원문 통째
-    var bodyTrHtml = isHtml ? bodyTr : esc(bodyTr);
-    var bodyOrigHtml = isHtml ? bodyOrig : esc(bodyOrig);
-    translationSection=
-      '<div>&nbsp;</div>'+
-      '<div style="'+mgb+'">[번역문 / Translation]</div>'+
-      '<div>&nbsp;</div>'+
-      '<div style="'+plain+'">'+bodyTrHtml+'</div>'+
-      '<div>&nbsp;</div>'+
-      '<div>---</div>'+
-      '<div>&nbsp;</div>'+
-      '<div style="'+mgb+'">[원문 / Original]</div>'+
-      '<div>&nbsp;</div>';
+    var isOrigOnly = pending && pending.origOnly;
+    if (isOrigOnly) {
+      // 번역문 없음 → 원문만 삽입
+      translationSection=
+        '<div>&nbsp;</div>'+
+        '<div style="'+mgb+'">[원문 / Original]</div>'+
+        '<div>&nbsp;</div>';
+    } else {
+      // 기존 방식: 번역문 통째 + --- + 원문 통째
+      var bodyTrHtml = isHtml ? bodyTr : esc(bodyTr);
+      var bodyOrigHtml = isHtml ? bodyOrig : esc(bodyOrig);
+      translationSection=
+        '<div>&nbsp;</div>'+
+        '<div style="'+mgb+'">[번역문 / Translation]</div>'+
+        '<div>&nbsp;</div>'+
+        '<div style="'+plain+'">'+bodyTrHtml+'</div>'+
+        '<div>&nbsp;</div>'+
+        '<div>---</div>'+
+        '<div>&nbsp;</div>'+
+        '<div style="'+mgb+'">[원문 / Original]</div>'+
+        '<div>&nbsp;</div>';
+    }
   }
   var html=currentHtml;
   if(/<body[^>]*>/i.test(html)){html=html.replace(/(<body[^>]*>)/i,'$1'+topHeader);}
