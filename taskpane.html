@@ -125,7 +125,10 @@
     <div class="src-hint">메일에서 텍스트 선택 시 그 부분, 안 하면 가장 최근 메일 본문이 들어와요.</div>
     <textarea id="body-orig" placeholder="원문 본문" oninput="onOrigChange()"></textarea>
     <div id="img-warning" class="img-warning hidden">⚠️ 이 메일에 이미지가 포함되어 있어요. 이미지는 자동 처리되지 않으니, 텍스트만 드래그해서 선택한 후 [↻ 다시 불러오기]를 눌러주세요.</div>
-    <div class="reload-row"><button class="btn-small" onclick="reloadSource()">↻ 다시 불러오기</button></div>
+    <div class="reload-row" style="gap:6px;">
+      <button class="btn-small" onclick="pasteFromClipboard()" style="background:#4472C4;color:#fff;border-color:#4472C4;">📋 클립보드에서 가져오기</button>
+      <button class="btn-small" onclick="reloadSource()">↻ 전체 본문 불러오기</button>
+    </div>
     <label class="format-toggle">
       <input type="checkbox" id="format-mode" />
       <span>서식 유지 모드 (표·볼드·이탤릭 보존)</span>
@@ -276,6 +279,30 @@ function setSrcBadge(label,ok){
   var el=document.getElementById('src-badge');
   if(el){el.textContent=label;el.className=ok?'badge badge-ok':'badge';}
 }
+function pasteFromClipboard(){
+  try {
+    navigator.clipboard.readText().then(function(text){
+      if (!text || !text.trim()) {
+        showStatus('클립보드가 비어있어요. 먼저 메일에서 텍스트를 Ctrl+C로 복사해주세요.', 'error');
+        return;
+      }
+      var ta = document.getElementById('body-orig');
+      ta.value = text.trim();
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+      setSrcBadge('클립보드', true);
+      autoDetectAndSetDir(text);
+      updateWordCount(text);
+      document.getElementById('img-warning').classList.add('hidden');
+      showStatus('✓ 클립보드에서 가져왔어요.', 'success');
+    }).catch(function(e){
+      // clipboard API 실패 시 직접 붙여넣기 안내
+      showStatus('클립보드 접근 실패. 원문 칸을 클릭 후 Ctrl+V로 직접 붙여넣어 주세요.', 'error');
+    });
+  } catch(e) {
+    showStatus('클립보드 접근 실패. 원문 칸을 클릭 후 Ctrl+V로 직접 붙여넣어 주세요.', 'error');
+  }
+}
+
 function reloadSource(){
   console.log('[TH] reloadSource called');
   var item=Office.context.mailbox.item;
