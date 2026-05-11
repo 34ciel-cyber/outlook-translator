@@ -148,7 +148,8 @@
     <div class="lbl">번역문 본문 <span class="badge">필수</span></div>
     <div class="ai-row">
       <select id="engine-select">
-        <option value="claude">Claude</option>
+        <option value="claude-haiku">Claude Haiku 4.5 (빠름·저렴)</option>
+        <option value="claude-sonnet">Claude Sonnet 4.6 (정확·고급)</option>
         <option value="openai">ChatGPT</option>
       </select>
       <button class="ai-btn" id="ai-btn" onclick="runAI()">AI 자동 번역 ↗</button>
@@ -168,6 +169,10 @@ function show(id){document.getElementById(id).classList.remove('hidden');}
 function hide(id){document.getElementById(id).classList.add('hidden');}
 
 var KEY_MAP={claude:'anthropic_api_key', openai:'openai_api_key'};
+// 드롭다운 값 → Anthropic 모델 ID 매핑
+var MODEL_IDS={'claude-haiku':'claude-haiku-4-5-20251001','claude-sonnet':'claude-sonnet-4-6'};
+// 드롭다운 값 → API 프로바이더 (키 조회 + 분기용)
+function engineProvider(eng){ return (eng && eng.indexOf('claude') === 0) ? 'claude' : 'openai'; }
 function loadAllKeys(){
   ['claude','openai'].forEach(function(eng){
     var k=localStorage.getItem(KEY_MAP[eng])||'';
@@ -275,7 +280,7 @@ Office.onReady(function(info){
     document.getElementById('subject').value=(item.subject||'').replace(/^(RE:\s*|\[EXT\]\s*|Fw:\s*)+/gi,'').trim();
     reloadSource();
     var engineSelect=document.getElementById('engine-select');
-    if(localStorage.getItem(KEY_MAP.claude)) engineSelect.value='claude';
+    if(localStorage.getItem(KEY_MAP.claude)) engineSelect.value='claude-haiku';
     else if(localStorage.getItem(KEY_MAP.openai)) engineSelect.value='openai';
     
     // 키보드 단축키
@@ -533,9 +538,12 @@ function setDir(d, isManual){
 
 function runAI(){
   var engine=document.getElementById('engine-select').value;
-  var key=localStorage.getItem(KEY_MAP[engine])||'';
+  var provider=engineProvider(engine);
+  var modelId=MODEL_IDS[engine] || null;
+  var key=localStorage.getItem(KEY_MAP[provider])||'';
   if(!key){
-    showStatus(engine.toUpperCase()+' API 키가 없어요. ⚙ API 키 설정에서 입력해주세요.','error');
+    var label = provider==='claude' ? 'Claude (Anthropic)' : 'ChatGPT (OpenAI)';
+    showStatus(label+' API 키가 없어요. ⚙ API 키 설정에서 입력해주세요.','error');
     show('settings-panel'); return;
   }
   var subject=document.getElementById('subject').value.trim();
@@ -560,7 +568,7 @@ function runAI(){
       return;
     }
     showStatus('교차 모드: ' + chunks.length + '개 단락을 번역 중...');
-    translateChunked(engine, key, chunks, srcLang, tgtLang).then(function(translations){
+    translateChunked(provider, key, chunks, srcLang, tgtLang, modelId).then(function(translations){
       // 번역문 칸에는 번역만 (사용자가 검수할 수 있도록)
       document.getElementById('body-tr').value = translations.join('\n\n');
       // 교차 구성 데이터를 localStorage에 저장 (회신창에서도 접근 가능하게)
@@ -593,7 +601,7 @@ function runAI(){
 
   bodyPromise.then(function(payload){
     var promise;
-    if(engine==='claude') promise=trClaude(key,subject,payload.body,srcLang,tgtLang,payload.mode);
+    if(provider==='claude') promise=trClaude(key,subject,payload.body,srcLang,tgtLang,payload.mode,modelId);
     else promise=trOpenAI(key,subject,payload.body,srcLang,tgtLang,payload.mode);
 
     return promise.then(function(result){
@@ -631,7 +639,7 @@ function extractLatestHtml(html){
   return html;
 }
 
-function trClaude(key,subject,body,srcLang,tgtLang,mode){
+function trClaude(key,subject,body,srcLang,tgtLang,mode,modelId){
   var sysMsg;
   if (mode === 'html') {
     sysMsg = 'Professional translator. The body is HTML with tags. Translate ONLY the visible text content from '+srcLang+' to '+tgtLang+'. PRESERVE all HTML tags, attributes, and structure EXACTLY. Do not modify or remove any tags (especially <table>, <tr>, <td>, <b>, <i>, <u>, <img>, <a>). Return ONLY JSON: {"translatedSubject":"...","translatedBody":"<html with translated text>"}';
@@ -641,7 +649,7 @@ function trClaude(key,subject,body,srcLang,tgtLang,mode){
   return fetch('https://api.anthropic.com/v1/messages',{
     method:'POST',
     headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-    body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:8000,
+    body:JSON.stringify({model:modelId||'claude-haiku-4-5-20251001',max_tokens:8000,
       system:sysMsg,
       messages:[{role:'user',content:'Subject: '+(subject||'(none)')+'\n\nBody:\n'+body}]})
   }).then(function(r){return r.text().then(function(t){
@@ -699,9 +707,16 @@ function splitForInterleave(text){
   if (!text) return [];
   // 1차: 빈 줄 기준 문단 분할
   var paragraphs = text.split(/\n\s*\n/).map(function(p){return p.trim();}).filter(function(p){return p.length > 0;});
-  // 2차: 너무 긴 문단(500자 이상)은 문장 단위로 추가 분할
   var result = [];
   paragraphs.forEach(function(p){
+    // 짧은 줄(≤100자) 2개 이상이 단일 \n으로만 연결돼 있으면 리스트로 간주 → 줄 단위 분할
+    // (예: "Chagee tea\nMilk tea\nBoba tea")
+    var lines = p.split(/\n/).map(function(l){return l.trim();}).filter(function(l){return l.length > 0;});
+    if (lines.length >= 2 && lines.every(function(l){return l.length <= 100;})) {
+      lines.forEach(function(l){ result.push(l); });
+      return;
+    }
+    // 일반 케이스: 너무 긴 문단(500자 이상)은 문장 단위로 추가 분할
     if (p.length <= 500) {
       result.push(p);
     } else {
@@ -724,17 +739,17 @@ function splitForInterleave(text){
 }
 
 // 교차 모드 전용 번역: 배열로 분할해서 보내고 배열로 받기
-function translateChunked(engine, key, chunks, srcLang, tgtLang){
+function translateChunked(provider, key, chunks, srcLang, tgtLang, modelId){
   var q = '"';
   var chunksJson = chunks.map(function(c, i){ return {id: i, text: c}; });
   var promptUser = 'Translate each chunk below from ' + srcLang + ' to ' + tgtLang + '. Return ONLY JSON array in this exact format: [{"id":0,"translation":"..."},{"id":1,"translation":"..."}]. Preserve the order. Chunks:\n' + JSON.stringify(chunksJson);
   var sysMsg = 'Professional translator. Translate accurately and naturally. Return ONLY valid JSON array, no markdown.';
   
-  if (engine === 'claude') {
+  if (provider === 'claude') {
     return fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
       headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:8000,system:sysMsg,messages:[{role:'user',content:promptUser}]})
+      body:JSON.stringify({model:modelId||'claude-haiku-4-5-20251001',max_tokens:8000,system:sysMsg,messages:[{role:'user',content:promptUser}]})
     }).then(function(r){return r.text().then(function(t){
       if(!r.ok){var e=JSON.parse(t);throw new Error(e.error&&e.error.message||'HTTP '+r.status);}
       var data=JSON.parse(t);
@@ -890,20 +905,21 @@ function buildHtml(currentHtml,subjectLine,bodyTr,bodyOrig){
     translationSection = parts.join('');
   } else {
     var isOrigOnly = pending && pending.origOnly;
+    var isPartialOrig = pending && pending.isPartial;
     if (isOrigOnly) {
-      // 번역문 없음 → 원문만 삽입
-      var bodyOrigHtml2 = esc(bodyOrig);
-      translationSection=
+      // 번역문 없음 → 원문 라벨만 + (부분 캡처일 때만) bodyOrig 명시 삽입
+      // 전체 본문 모드에서는 아웃룩 자동 인용이 원문 역할을 하므로 중복 방지 위해 생략
+      translationSection =
         '<div>&nbsp;</div>'+
         '<div style="'+mgb+'">[원문 / Original]</div>'+
-        '<div>&nbsp;</div>'+
-        '<div style="'+plain+'">'+bodyOrigHtml2+'</div>'+
         '<div>&nbsp;</div>';
+      if (isPartialOrig) {
+        var bodyOrigHtml2 = esc(bodyOrig);
+        translationSection += '<div style="'+plain+'">'+bodyOrigHtml2+'</div><div>&nbsp;</div>';
+      }
     } else {
       // 기존 방식: 번역문 통째 + --- + 원문 통째
       var bodyTrHtml = isHtml ? bodyTr : esc(bodyTr);
-      var bodyOrigHtml = isHtml ? bodyOrig : esc(bodyOrig);
-      var isPartialOrig = pending && pending.isPartial;
       translationSection=
         '<div>&nbsp;</div>'+
         '<div style="'+mgb+'">[번역문 / Translation]</div>'+
