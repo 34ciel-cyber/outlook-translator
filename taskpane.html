@@ -209,9 +209,9 @@ function onOrigChange(){
 
 function updateWordCount(text){
   var box = document.getElementById('word-count-box');
-  var wc = document.getElementById('word-count');
+  if (!box) return;
   if (!text || !text.trim()){
-    wc.outerHTML = '<span class="wc-empty" id="word-count">원문을 입력하면 단어 수가 표시됩니다</span>';
+    box.innerHTML = '<span class="wc-empty">원문을 입력하면 단어 수가 표시됩니다</span>';
     return;
   }
   var tokens = text.trim().split(/\s+/);
@@ -229,9 +229,7 @@ function updateWordCount(text){
     html += '<div class="wc-item"><span class="wc-num">' + enCount.toLocaleString() + '</span><span class="wc-label">영어 단어</span></div>';
   }
   if (!html) {
-    html = '<span class="wc-empty" id="word-count">단어 없음</span>';
-  } else {
-    html = '<span id="word-count" style="display:contents">' + html + '</span>';
+    html = '<span class="wc-empty">단어 없음</span>';
   }
   box.innerHTML = html;
 }
@@ -283,22 +281,32 @@ function reloadSource(){
   if(!item) return;
   if(item.getSelectedDataAsync){
     item.getSelectedDataAsync(Office.CoercionType.Text,function(r){
-      if(r.status===Office.AsyncResultStatus.Succeeded&&r.value&&r.value.data&&r.value.data.trim()){
-        document.getElementById('body-orig').value=r.value.data.trim();
-        setSrcBadge('선택한 부분',true);
-        autoDetectAndSetDir(r.value.data);
-        updateWordCount(r.value.data);
+      if(r.status===Office.AsyncResultStatus.Succeeded && r.value && r.value.data && r.value.data.trim()){
+        var selectedText = r.value.data.trim();
+        var ta = document.getElementById('body-orig');
+        ta.value = selectedText;
+        // 입력 이벤트 강제 트리거 (다른 핸들러도 작동하게)
+        ta.dispatchEvent(new Event('input', { bubbles: true }));
+        setSrcBadge('선택한 부분', true);
+        autoDetectAndSetDir(selectedText);
+        updateWordCount(selectedText);
         document.getElementById('img-warning').classList.add('hidden');
-      } else { extractBody(); }
+      } else {
+        extractBody();
+      }
     });
-  } else { extractBody(); }
+  } else {
+    extractBody();
+  }
 }
 function extractBody(){
   // 텍스트 본문 + HTML 본문 둘 다 가져오기 (이미지 체크용)
   Office.context.mailbox.item.body.getAsync(Office.CoercionType.Text,function(r){
     if(r.status!==Office.AsyncResultStatus.Succeeded){setSrcBadge('실패',false);return;}
     var text = extractLatest(r.value||'');
-    document.getElementById('body-orig').value=text;
+    var ta = document.getElementById('body-orig');
+    ta.value = text;
+    ta.dispatchEvent(new Event('input', { bubbles: true }));
     setSrcBadge('자동 입력',true);
     autoDetectAndSetDir(text);
     updateWordCount(text);
@@ -619,7 +627,8 @@ function autoInsert(){
       if(rSet.status===Office.AsyncResultStatus.Succeeded){
         // 원문 단어 수 계산 (사용자가 트래킹용으로 사용)
         var origText = pending.bodyOrig || '';
-        var tokens = origText.trim().split(/\s+/);
+        console.log('[TH] Word count source length:', origText.length);
+        var tokens = origText.trim().split(/\s+/).filter(function(t){return t.length>0;});
         var koCount = 0, enCount = 0;
         tokens.forEach(function(tok){
           if (/[\u3131-\u3163\uac00-\ud7a3]/.test(tok)) koCount++;
