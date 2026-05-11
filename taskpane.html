@@ -160,7 +160,7 @@
 <div id="compose-status" class="status hidden"></div>
 
 <script>
-var direction='ko-en', isComposeMode=false, dirManuallySet=false;
+var direction='ko-en', isComposeMode=false, dirManuallySet=false, clipboardOverride=false;
 function show(id){document.getElementById(id).classList.remove('hidden');}
 function hide(id){document.getElementById(id).classList.add('hidden');}
 
@@ -293,6 +293,7 @@ function pasteFromClipboard(){
         showStatus('클립보드가 비어있어요. 먼저 메일에서 텍스트를 Ctrl+C로 복사해주세요.', 'error');
         return;
       }
+      clipboardOverride = true;
       var ta = document.getElementById('body-orig');
       ta.value = text.trim();
       ta.dispatchEvent(new Event('input', { bubbles: true }));
@@ -313,6 +314,7 @@ function pasteFromClipboard(){
 
 function reloadSource(){
   console.log('[TH] reloadSource called');
+  clipboardOverride = false;
   var item=Office.context.mailbox.item;
   if(!item){ console.log('[TH] no item'); return; }
   console.log('[TH] item exists, has getSelectedDataAsync:', !!item.getSelectedDataAsync);
@@ -351,6 +353,10 @@ function extractBody(){
   // 텍스트 본문 + HTML 본문 둘 다 가져오기 (이미지 체크용)
   Office.context.mailbox.item.body.getAsync(Office.CoercionType.Text,function(r){
     if(r.status!==Office.AsyncResultStatus.Succeeded){setSrcBadge('실패',false);return;}
+    if (clipboardOverride) {
+      console.log('[TH] extractBody skipped — clipboard override active');
+      return;
+    }
     var text = extractLatest(r.value||'');
     var ta = document.getElementById('body-orig');
     ta.value = text;
