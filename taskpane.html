@@ -737,25 +737,26 @@ function buildHtml(currentHtml,subjectLine,bodyTr,bodyOrig){
     try { var ild = localStorage.getItem('th_interleave'); if(ild) interleaveData = JSON.parse(ild); } catch(e){}
   }
   if (isInterleave && interleaveData) {
-    // 교차 모드: 원문↔번역문 번갈아 배치
+    // 교차 모드: 헤더 한 번 + 원문/번역문 짝지어 배치
     var data = interleaveData;
     var parts = ['<div>&nbsp;</div>'];
+    parts.push('<div style="'+mgb+'">[번역문 / Translation]</div>');
+    parts.push('<div>&nbsp;</div>');
     for (var i = 0; i < Math.max(data.originals.length, data.translations.length); i++) {
       var orig = data.originals[i] || '';
       var trans = data.translations[i] || '';
-      parts.push('<div style="'+mgb+'">[원문 / Original ' + (i+1) + ']</div>');
+      parts.push('<div style="'+plain+'">' + esc(orig) + '</div>');
+      parts.push('<div style="'+plain+'">' + esc(trans) + '</div>');
       parts.push('<div>&nbsp;</div>');
-      parts.push('<div style="'+plain+'">' + esc(orig).replace(/\n/g,'<br>') + '</div>');
-      parts.push('<div>&nbsp;</div>');
-      parts.push('<div style="'+mgb+'">[번역문 / Translation ' + (i+1) + ']</div>');
-      parts.push('<div>&nbsp;</div>');
-      parts.push('<div style="'+plain+'">' + esc(trans).replace(/\n/g,'<br>') + '</div>');
-      parts.push('<div>&nbsp;</div>');
-      if (i < Math.max(data.originals.length, data.translations.length) - 1) {
-        parts.push('<div>---</div>');
-        parts.push('<div>&nbsp;</div>');
-      }
     }
+    parts.push('<div>---</div>');
+    parts.push('<div>&nbsp;</div>');
+    parts.push('<div style="'+mgb+'">[원문 / Original]</div>');
+    parts.push('<div>&nbsp;</div>');
+    for (var i = 0; i < data.originals.length; i++) {
+      parts.push('<div style="'+plain+'">' + esc(data.originals[i] || '') + '</div>');
+    }
+    parts.push('<div>&nbsp;</div>');
     translationSection = parts.join('');
   } else {
     var isOrigOnly = pending && pending.origOnly;
