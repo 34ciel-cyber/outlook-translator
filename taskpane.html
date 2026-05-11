@@ -54,7 +54,12 @@
     .lang-btn.active { background: #1f1f1f; color: #fff; border-color: #1f1f1f; }
     .auto-tag { font-size: 9px; color: #aa7800; margin-left: 4px; }
     kbd { font-family: 'Segoe UI', sans-serif; font-size: 10px; padding: 1px 4px; border: 1px solid #ccc; border-radius: 3px; background: #f5f5f5; color: #555; }
-    .word-count { font-size: 10px; color: #666; font-weight: normal; font-style: italic; text-transform: none; letter-spacing: 0; margin-left: auto; }
+    .word-count-box { display: flex; gap: 12px; align-items: center; padding: 8px 12px; background: rgba(68,114,196,0.06); border: 1px solid rgba(68,114,196,0.2); border-radius: 6px; margin-bottom: 8px; }
+    .wc-item { display: flex; flex-direction: column; gap: 1px; }
+    .wc-num { font-size: 15px; font-weight: 700; color: #4472C4; line-height: 1; }
+    .wc-label { font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 0.04em; }
+    .wc-divider { width: 1px; height: 24px; background: rgba(68,114,196,0.2); }
+    .wc-empty { font-size: 11px; color: #aaa; font-style: italic; }
     .img-warning { font-size: 10px; color: #aa7800; padding: 6px 8px; background: rgba(170,120,0,0.08); border-left: 2px solid #aa7800; border-radius: 3px; margin-top: 4px; margin-bottom: 4px; line-height: 1.5; }
     .format-toggle { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #666; margin-top: 8px; cursor: pointer; user-select: none; }
     .format-toggle input { cursor: pointer; }
@@ -115,7 +120,8 @@
   </div>
 
   <div class="field">
-    <div class="lbl">원문 본문 <span class="badge" id="src-badge">자동</span><span class="word-count" id="word-count"></span></div>
+    <div class="lbl">원문 본문 <span class="badge" id="src-badge">자동</span></div>
+    <div class="word-count-box" id="word-count-box"><span class="wc-empty" id="word-count">원문을 입력하면 단어 수가 표시됩니다</span></div>
     <div class="src-hint">메일에서 텍스트 선택 시 그 부분, 안 하면 가장 최근 메일 본문이 들어와요.</div>
     <textarea id="body-orig" placeholder="원문 본문" oninput="onOrigChange()"></textarea>
     <div id="img-warning" class="img-warning hidden">⚠️ 이 메일에 이미지가 포함되어 있어요. 이미지는 자동 처리되지 않으니, 텍스트만 드래그해서 선택한 후 [↻ 다시 불러오기]를 눌러주세요.</div>
@@ -124,6 +130,11 @@
       <input type="checkbox" id="format-mode" />
       <span>서식 유지 모드 (표·볼드·이탤릭 보존)</span>
       <span class="info">— 베타, 토큰 비용 증가</span>
+    </label>
+    <label class="format-toggle">
+      <input type="checkbox" id="interleave-mode" />
+      <span>교차 삽입 모드 (원문↔번역문 번갈아 배치)</span>
+      <span class="info">— 긴 메일 검수에 유용</span>
     </label>
   </div>
 
@@ -197,22 +208,32 @@ function onOrigChange(){
 }
 
 function updateWordCount(text){
+  var box = document.getElementById('word-count-box');
+  var wc = document.getElementById('word-count');
   if (!text || !text.trim()){
-    document.getElementById('word-count').textContent = '';
+    wc.outerHTML = '<span class="wc-empty" id="word-count">원문을 입력하면 단어 수가 표시됩니다</span>';
     return;
   }
-  // 한글 어절: 한글이 포함된 공백 단위
-  // 영어 단어: 영문자가 포함된 공백 단위
   var tokens = text.trim().split(/\s+/);
   var koCount = 0, enCount = 0;
   tokens.forEach(function(tok){
     if (/[\u3131-\u3163\uac00-\ud7a3]/.test(tok)) koCount++;
     else if (/[a-zA-Z]/.test(tok)) enCount++;
   });
-  var parts = [];
-  if (koCount > 0) parts.push('한국어: ' + koCount.toLocaleString() + '단어');
-  if (enCount > 0) parts.push('영어: ' + enCount.toLocaleString() + '단어');
-  document.getElementById('word-count').textContent = parts.join(' · ');
+  var html = '';
+  if (koCount > 0) {
+    html += '<div class="wc-item"><span class="wc-num">' + koCount.toLocaleString() + '</span><span class="wc-label">한국어 단어</span></div>';
+  }
+  if (koCount > 0 && enCount > 0) html += '<div class="wc-divider"></div>';
+  if (enCount > 0) {
+    html += '<div class="wc-item"><span class="wc-num">' + enCount.toLocaleString() + '</span><span class="wc-label">영어 단어</span></div>';
+  }
+  if (!html) {
+    html = '<span class="wc-empty" id="word-count">단어 없음</span>';
+  } else {
+    html = '<span id="word-count" style="display:contents">' + html + '</span>';
+  }
+  box.innerHTML = html;
 }
 
 Office.onReady(function(info){
@@ -336,6 +357,30 @@ function runAI(){
   var srcLang=direction==='ko-en'?'Korean':'English';
   var tgtLang=direction==='ko-en'?'English':'Korean';
   var useHtmlMode = document.getElementById('format-mode').checked;
+  var useInterleave = document.getElementById('interleave-mode').checked;
+  
+  // 교차 모드면 분할 번역 경로
+  if (useInterleave && !useHtmlMode) {
+    var chunks = splitForInterleave(body);
+    if (chunks.length === 0){
+      showStatus('원문 본문을 입력해주세요.','error');
+      btn.disabled=false; btn.textContent='AI 자동 번역 ↗';
+      return;
+    }
+    showStatus('교차 모드: ' + chunks.length + '개 단락을 번역 중...');
+    translateChunked(engine, key, chunks, srcLang, tgtLang).then(function(translations){
+      // 번역문 칸에는 번역만 (사용자가 검수할 수 있도록)
+      document.getElementById('body-tr').value = translations.join('\n\n');
+      // 교차 구성 데이터 저장
+      window._interleaveData = {originals: chunks, translations: translations};
+      showStatus('✓ 번역 완료. ' + chunks.length + '개 단락이 교차 모드로 삽입됩니다.','success');
+    }).catch(function(e){
+      showStatus('번역 오류: '+e.message,'error');
+    }).finally(function(){
+      btn.disabled=false; btn.textContent='AI 자동 번역 ↗';
+    });
+    return;
+  }
 
   // HTML 모드면 원문을 HTML로 다시 가져오기
   var bodyPromise;
@@ -457,6 +502,86 @@ function parseTranslationJson(raw){
   }
 }
 
+// ── 원문을 의미 단위로 분할 (교차 모드용) ──
+function splitForInterleave(text){
+  if (!text) return [];
+  // 1차: 빈 줄 기준 문단 분할
+  var paragraphs = text.split(/\n\s*\n/).map(function(p){return p.trim();}).filter(function(p){return p.length > 0;});
+  // 2차: 너무 긴 문단(500자 이상)은 문장 단위로 추가 분할
+  var result = [];
+  paragraphs.forEach(function(p){
+    if (p.length <= 500) {
+      result.push(p);
+    } else {
+      // 문장 단위 분할: . ! ? 또는 한국어 종결어미
+      var sentences = p.split(/(?<=[.!?。])\s+|(?<=[다요죠].)\s+/).filter(function(s){return s.trim().length > 0;});
+      // 다시 합쳐서 너무 짧으면 묶기
+      var chunk = '';
+      sentences.forEach(function(s){
+        if ((chunk + s).length > 500 && chunk) {
+          result.push(chunk.trim());
+          chunk = s;
+        } else {
+          chunk += (chunk ? ' ' : '') + s;
+        }
+      });
+      if (chunk.trim()) result.push(chunk.trim());
+    }
+  });
+  return result;
+}
+
+// 교차 모드 전용 번역: 배열로 분할해서 보내고 배열로 받기
+function translateChunked(engine, key, chunks, srcLang, tgtLang){
+  var q = '"';
+  var chunksJson = chunks.map(function(c, i){ return {id: i, text: c}; });
+  var promptUser = 'Translate each chunk below from ' + srcLang + ' to ' + tgtLang + '. Return ONLY JSON array in this exact format: [{"id":0,"translation":"..."},{"id":1,"translation":"..."}]. Preserve the order. Chunks:\n' + JSON.stringify(chunksJson);
+  var sysMsg = 'Professional translator. Translate accurately and naturally. Return ONLY valid JSON array, no markdown.';
+  
+  if (engine === 'claude') {
+    return fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:8000,system:sysMsg,messages:[{role:'user',content:promptUser}]})
+    }).then(function(r){return r.text().then(function(t){
+      if(!r.ok){var e=JSON.parse(t);throw new Error(e.error&&e.error.message||'HTTP '+r.status);}
+      var data=JSON.parse(t);
+      var raw=data.content.map(function(b){return b.text||'';}).join('');
+      return parseChunkedResult(raw, chunks);
+    });});
+  } else {
+    return fetch('https://api.openai.com/v1/chat/completions',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
+      body:JSON.stringify({model:'gpt-4o-mini',max_tokens:8000,messages:[{role:'system',content:sysMsg},{role:'user',content:promptUser}]})
+    }).then(function(r){return r.text().then(function(t){
+      if(!r.ok){var e=JSON.parse(t);throw new Error(e.error&&e.error.message||'HTTP '+r.status);}
+      var data=JSON.parse(t);
+      var raw=data.choices[0].message.content;
+      return parseChunkedResult(raw, chunks);
+    });});
+  }
+}
+
+function parseChunkedResult(raw, originalChunks){
+  var cleaned = raw.replace(/```json|```/g,'').trim();
+  try {
+    var arr = JSON.parse(cleaned);
+    if (!Array.isArray(arr)) throw new Error('not array');
+    // id 순서대로 정렬
+    arr.sort(function(a,b){return (a.id||0) - (b.id||0);});
+    var translations = arr.map(function(item){return item.translation || '';});
+    // 길이 매칭 검증
+    if (translations.length !== originalChunks.length) {
+      console.warn('Chunk count mismatch:', translations.length, 'vs', originalChunks.length);
+    }
+    return translations;
+  } catch(e) {
+    throw new Error('교차 모드 응답 파싱 실패: ' + cleaned.substring(0, 100));
+  }
+}
+
+
 function showStatus(msg,type){
   var el=document.getElementById('status-msg');
   el.textContent=msg;el.className='status'+(type?' '+type:'');el.classList.remove('hidden');
@@ -471,7 +596,8 @@ function createReply(){
   var isHtmlMode = document.getElementById('format-mode').checked;
   if(!bodyTr){showStatus('번역문 본문을 입력하거나 AI 자동 번역을 눌러주세요.','error');return;}
   var subjectLine=subjectTr||subject||'';
-  savePending({subjectLine:subjectLine, bodyTr:stripTH(bodyTr), bodyOrig:stripTH(bodyOrig), isHtml: isHtmlMode});
+  var isInterleave = document.getElementById('interleave-mode').checked;
+  savePending({subjectLine:subjectLine, bodyTr:stripTH(bodyTr), bodyOrig:stripTH(bodyOrig), isHtml: isHtmlMode, isInterleave: isInterleave});
   Office.context.mailbox.item.displayReplyAllForm({});
   showStatus('✓ 회신창이 열렸어요. 패널을 다시 한 번만 열면 자동 삽입돼요.','success');
 }
@@ -511,21 +637,47 @@ function buildHtml(currentHtml,subjectLine,bodyTr,bodyOrig){
     '<div style="'+mg+'">번역문이 추가되었습니다.</div>'+
     '<div style="'+mg+'">Translation has been added.</div>'+
     '<div>&nbsp;</div>';
-  // HTML 모드면 번역문/원문을 그대로 (HTML 태그 살림), 아니면 escape
   var pending = getPendingForBuild();
   var isHtml = pending && pending.isHtml;
-  var bodyTrHtml = isHtml ? bodyTr : esc(bodyTr);
-  var bodyOrigHtml = isHtml ? bodyOrig : esc(bodyOrig);
-  var translationSection=
-    '<div>&nbsp;</div>'+
-    '<div style="'+mgb+'">[번역문 / Translation]</div>'+
-    '<div>&nbsp;</div>'+
-    '<div style="'+plain+'">'+bodyTrHtml+'</div>'+
-    '<div>&nbsp;</div>'+
-    '<div>---</div>'+
-    '<div>&nbsp;</div>'+
-    '<div style="'+mgb+'">[원문 / Original]</div>'+
-    '<div>&nbsp;</div>';
+  var isInterleave = pending && pending.isInterleave;
+  var translationSection;
+  
+  if (isInterleave && window._interleaveData) {
+    // 교차 모드: 원문↔번역문 번갈아 배치
+    var data = window._interleaveData;
+    var parts = ['<div>&nbsp;</div>'];
+    for (var i = 0; i < Math.max(data.originals.length, data.translations.length); i++) {
+      var orig = data.originals[i] || '';
+      var trans = data.translations[i] || '';
+      parts.push('<div style="'+mgb+'">[원문 / Original ' + (i+1) + ']</div>');
+      parts.push('<div>&nbsp;</div>');
+      parts.push('<div style="'+plain+'">' + esc(orig).replace(/\n/g,'<br>') + '</div>');
+      parts.push('<div>&nbsp;</div>');
+      parts.push('<div style="'+mgb+'">[번역문 / Translation ' + (i+1) + ']</div>');
+      parts.push('<div>&nbsp;</div>');
+      parts.push('<div style="'+plain+'">' + esc(trans).replace(/\n/g,'<br>') + '</div>');
+      parts.push('<div>&nbsp;</div>');
+      if (i < Math.max(data.originals.length, data.translations.length) - 1) {
+        parts.push('<div>---</div>');
+        parts.push('<div>&nbsp;</div>');
+      }
+    }
+    translationSection = parts.join('');
+  } else {
+    // 기존 방식: 번역문 통째 + --- + 원문 통째
+    var bodyTrHtml = isHtml ? bodyTr : esc(bodyTr);
+    var bodyOrigHtml = isHtml ? bodyOrig : esc(bodyOrig);
+    translationSection=
+      '<div>&nbsp;</div>'+
+      '<div style="'+mgb+'">[번역문 / Translation]</div>'+
+      '<div>&nbsp;</div>'+
+      '<div style="'+plain+'">'+bodyTrHtml+'</div>'+
+      '<div>&nbsp;</div>'+
+      '<div>---</div>'+
+      '<div>&nbsp;</div>'+
+      '<div style="'+mgb+'">[원문 / Original]</div>'+
+      '<div>&nbsp;</div>';
+  }
   var html=currentHtml;
   if(/<body[^>]*>/i.test(html)){html=html.replace(/(<body[^>]*>)/i,'$1'+topHeader);}
   else{html=topHeader+html;}
