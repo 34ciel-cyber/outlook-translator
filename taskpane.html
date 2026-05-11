@@ -70,10 +70,13 @@
 <div class="format-tag"><span class="dot"></span>맑은 고딕 11pt · #4472C4</div>
 
 <div id="banner-read" class="banner banner-read hidden">
-  <b>받은 메일 모드</b> — 번역 후 <b>회신 만들기</b>를 누르면 회신창이 열려요. <kbd>Ctrl</kbd>+<kbd>Enter</kbd>로 빠르게 번역, <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Enter</kbd>로 회신 만들기.
+  <b>받은 메일 모드</b> — 여기서도 가능하지만, <b>전체 회신을 먼저 누르고</b> 회신창에서 Translation Helper를 여는 게 더 편해요.
 </div>
 <div id="banner-compose-empty" class="banner banner-compose hidden">
   <b>회신 작성 모드</b> — 받은 메일에서 먼저 번역해주세요.
+</div>
+<div id="banner-compose" class="banner banner-compose hidden">
+  <b>회신 작성 모드</b> — 인용된 원문이 자동으로 들어왔어요. 번역 후 <b>현재 회신에 삽입</b>을 누르면 바로 적용돼요.
 </div>
 <div id="pending-box" class="pending-box hidden">
   <div class="pending-title">번역 자동 삽입 중...</div>
@@ -243,13 +246,28 @@ Office.onReady(function(info){
   var item=Office.context.mailbox.item;
   isComposeMode=typeof item.subject!=='string';
   if(isComposeMode){
+    // 먼저 pending 데이터 확인 (읽기 모드에서 온 경우)
     var pending=getPending();
     if(pending){
       show('pending-box');
       document.getElementById('pending-desc').textContent='제목: '+pending.subjectLine;
       setTimeout(function(){ autoInsert(); }, 400);
     } else {
-      show('banner-compose-empty');
+      // 회신창에서 직접 시작 — full UI 보여주기
+      show('banner-compose');
+      show('read-ui');
+      // 회신 만들기 버튼 → 현재 창에 삽입 버튼으로 변경
+      document.getElementById('create-btn').textContent = '📧 현재 회신에 삽입';
+      document.getElementById('create-btn').onclick = insertDirectly;
+      // 제목 가져오기
+      item.subject.getAsync(function(r){
+        if(r.status===Office.AsyncResultStatus.Succeeded){
+          var subj = (r.value||'').replace(/^(RE:\s*|\[EXT\]\s*|Fw:\s*)+/gi,'').trim();
+          document.getElementById('subject').value = subj;
+        }
+      });
+      // 회신 본문에서 인용된 원문 추출
+      extractBodyFromCompose();
     }
   } else {
     show('banner-read');
@@ -279,6 +297,118 @@ function setSrcBadge(label,ok){
   var el=document.getElementById('src-badge');
   if(el){el.textContent=label;el.className=ok?'badge badge-ok':'badge';}
 }
+function extractBodyFromCompose(){
+  console.log('[TH] extractBodyFromCompose called');
+  Office.context.mailbox.item.body.getAsync(Office.CoercionType.Text, function(r){
+    if(r.status !== Office.AsyncResultStatus.Succeeded){
+      console.log('[TH] compose body fetch failed');
+      return;
+    }
+    var fullText = r.value || '';
+    console.log('[TH] compose body length:', fullText.length);
+    // 인용된 원문 추출 (From:/보낸 사람: 이후 메일 헤더 건너뛰고 본문만)
+    var text = extractQuotedBody(fullText);
+    if (text) {
+      var ta = document.getElementById('body-orig');
+      ta.value = text;
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+      setSrcBadge('인용 원문', true);
+      autoDetectAndSetDir(text);
+      updateWordCount(text);
+    }
+  });
+}
+
+function extractQuotedBody(fullText){
+  var lines = fullText.split('\n');
+  var headerStart = -1;
+  // From: 또는 보낸 사람: 찾기
+  for(var i = 0; i < lines.length; i++){
+    if(/^(From|보낸 사람|보낸사람)\s*:/i.test(lines[i].trim())){
+      headerStart = i;
+      break;
+    }
+  }
+  if(headerStart === -1) return '';
+  // 헤더 블록 건너뛰기 (From, Sent, To, Cc, Subject 등)
+  var bodyStart = headerStart;
+  for(var i = headerStart; i < lines.length; i++){
+    var t = lines[i].trim();
+    if(t !== '' &&
+       !/^(From|Sent|To|Cc|Bcc|Subject|보낸 사람|보낸사람|보낸 날짜|보낸날짜|받는 사람|받는사람|참조|숨은 참조|제목)\s*:/i.test(t)){
+      bodyStart = i;
+      break;
+    }
+  }
+  // 다음 인용 메일 시작점 찾기 (두 번째 From:)
+  var bodyEnd = lines.length;
+  for(var i = bodyStart + 1; i < lines.length; i++){
+    if(/^(From|보낸 사람|보낸사람)\s*:/i.test(lines[i].trim())){
+      bodyEnd = i;
+      break;
+    }
+  }
+  return lines.slice(bodyStart, bodyEnd)
+    .filter(function(l){return !l.match(/번역\s*부탁드립니다|Please\s*translate/i);})
+    .join('\n').trim();
+}
+
+// 회신창에 직접 삽입
+function insertDirectly(){
+  var subject = document.getElementById('subject').value.trim();
+  var subjectTr = document.getElementById('subject-translated').value.trim();
+  var bodyTr = document.getElementById('body-tr').value.trim();
+  var bodyOrig = document.getElementById('body-orig').value.trim();
+  var isHtmlMode = document.getElementById('format-mode').checked;
+  var isInterleave = document.getElementById('interleave-mode').checked;
+  var origOnlyMode = !bodyTr;
+  var subjectLine = subjectTr || subject || '';
+
+  showStatus('삽입 중...');
+
+  Office.context.mailbox.item.body.getAsync(Office.CoercionType.Html, function(rGet){
+    if(rGet.status !== Office.AsyncResultStatus.Succeeded){
+      showStatus('본문 가져오기 실패', 'error');
+      return;
+    }
+    // pending 데이터 임시 설정
+    _currentPending = {
+      subjectLine: subjectLine,
+      bodyTr: stripTH(bodyTr),
+      bodyOrig: stripTH(bodyOrig),
+      isHtml: isHtmlMode,
+      isInterleave: isInterleave,
+      origOnly: origOnlyMode,
+      isPartial: clipboardOverride
+    };
+
+    // interleave 데이터도 확인
+    var newHtml = buildHtml(rGet.value || '', subjectLine, stripTH(bodyTr), stripTH(bodyOrig));
+
+    Office.context.mailbox.item.body.setAsync(newHtml, {coercionType: Office.CoercionType.Html}, function(rSet){
+      _currentPending = null;
+      if(rSet.status === Office.AsyncResultStatus.Succeeded){
+        // 단어수 계산
+        var origText = bodyOrig;
+        var tokens = origText.trim().split(/\s+/).filter(function(t){return t.length>0;});
+        var koCount = 0, enCount = 0;
+        tokens.forEach(function(tok){
+          if(/[\u3131-\u3163\uac00-\ud7a3]/.test(tok)) koCount++;
+          else if(/[a-zA-Z]/.test(tok)) enCount++;
+        });
+        var wcMsg = '';
+        if(koCount > 0) wcMsg += '한국어: ' + koCount + '단어';
+        if(koCount > 0 && enCount > 0) wcMsg += ' · ';
+        if(enCount > 0) wcMsg += '영어: ' + enCount + '단어';
+        showStatus('✓ 삽입 완료! ' + (wcMsg ? '(' + wcMsg + ')' : ''), 'success');
+        try { localStorage.removeItem('th_interleave'); } catch(e){}
+      } else {
+        showStatus('삽입 실패: ' + (rSet.error && rSet.error.message || ''), 'error');
+      }
+    });
+  });
+}
+
 function pasteFromClipboard(){
   console.log('[TH] pasteFromClipboard called');
   try {
