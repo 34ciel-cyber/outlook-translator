@@ -280,8 +280,15 @@ function setSrcBadge(label,ok){
   if(el){el.textContent=label;el.className=ok?'badge badge-ok':'badge';}
 }
 function pasteFromClipboard(){
+  console.log('[TH] pasteFromClipboard called');
   try {
+    if (!navigator.clipboard || !navigator.clipboard.readText) {
+      console.log('[TH] clipboard API not available');
+      showStatus('클립보드 API 지원 안 됨. 원문 칸을 클릭 후 Ctrl+V로 직접 붙여넣어 주세요.', 'error');
+      return;
+    }
     navigator.clipboard.readText().then(function(text){
+      console.log('[TH] clipboard text length:', (text||'').length);
       if (!text || !text.trim()) {
         showStatus('클립보드가 비어있어요. 먼저 메일에서 텍스트를 Ctrl+C로 복사해주세요.', 'error');
         return;
@@ -293,12 +300,13 @@ function pasteFromClipboard(){
       autoDetectAndSetDir(text);
       updateWordCount(text);
       document.getElementById('img-warning').classList.add('hidden');
-      showStatus('✓ 클립보드에서 가져왔어요.', 'success');
+      showStatus('✓ 클립보드에서 ' + text.trim().length + '자 가져옴', 'success');
     }).catch(function(e){
-      // clipboard API 실패 시 직접 붙여넣기 안내
-      showStatus('클립보드 접근 실패. 원문 칸을 클릭 후 Ctrl+V로 직접 붙여넣어 주세요.', 'error');
+      console.log('[TH] clipboard readText error:', e.message);
+      showStatus('클립보드 접근 실패: ' + e.message + '. 원문 칸을 클릭 후 Ctrl+V로 직접 붙여넣어 주세요.', 'error');
     });
   } catch(e) {
+    console.log('[TH] clipboard catch error:', e.message);
     showStatus('클립보드 접근 실패. 원문 칸을 클릭 후 Ctrl+V로 직접 붙여넣어 주세요.', 'error');
   }
 }
