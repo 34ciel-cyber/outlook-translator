@@ -658,6 +658,8 @@ function autoInsert(){
   var pending=getPending();
   if(!pending){show('banner-compose-empty');hide('pending-box');return;}
   _currentPending = pending;
+  console.log('[TH] autoInsert pending.bodyOrig length:', (pending.bodyOrig||'').length);
+  console.log('[TH] autoInsert pending.bodyTr length:', (pending.bodyTr||'').length);
   Office.context.mailbox.item.body.getAsync(Office.CoercionType.Html,function(rGet){
     if(rGet.status!==Office.AsyncResultStatus.Succeeded){
       document.getElementById('pending-desc').textContent='본문 가져오기 실패. 패널을 닫았다 다시 열어주세요.';
@@ -739,13 +741,17 @@ function buildHtml(currentHtml,subjectLine,bodyTr,bodyOrig){
     var isOrigOnly = pending && pending.origOnly;
     if (isOrigOnly) {
       // 번역문 없음 → 원문만 삽입
+      var bodyOrigHtml2 = esc(bodyOrig);
       translationSection=
         '<div>&nbsp;</div>'+
         '<div style="'+mgb+'">[원문 / Original]</div>'+
+        '<div>&nbsp;</div>'+
+        '<div style="'+plain+'">'+bodyOrigHtml2+'</div>'+
         '<div>&nbsp;</div>';
     } else {
       // 기존 방식: 번역문 통째 + --- + 원문 통째
       var bodyTrHtml = isHtml ? bodyTr : esc(bodyTr);
+      var bodyOrigHtml = isHtml ? bodyOrig : esc(bodyOrig);
       var bodyOrigHtml = isHtml ? bodyOrig : esc(bodyOrig);
       translationSection=
         '<div>&nbsp;</div>'+
@@ -756,6 +762,8 @@ function buildHtml(currentHtml,subjectLine,bodyTr,bodyOrig){
         '<div>---</div>'+
         '<div>&nbsp;</div>'+
         '<div style="'+mgb+'">[원문 / Original]</div>'+
+        '<div>&nbsp;</div>'+
+        '<div style="'+plain+'">'+bodyOrigHtml+'</div>'+
         '<div>&nbsp;</div>';
     }
   }
