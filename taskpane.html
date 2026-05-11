@@ -433,8 +433,8 @@ function runAI(){
     translateChunked(engine, key, chunks, srcLang, tgtLang).then(function(translations){
       // 번역문 칸에는 번역만 (사용자가 검수할 수 있도록)
       document.getElementById('body-tr').value = translations.join('\n\n');
-      // 교차 구성 데이터 저장
-      window._interleaveData = {originals: chunks, translations: translations};
+      // 교차 구성 데이터를 localStorage에 저장 (회신창에서도 접근 가능하게)
+      try { localStorage.setItem('th_interleave', JSON.stringify({originals: chunks, translations: translations})); } catch(e){}
       showStatus('✓ 번역 완료. ' + chunks.length + '개 단락이 교차 모드로 삽입됩니다.','success');
     }).catch(function(e){
       showStatus('번역 오류: '+e.message,'error');
@@ -660,7 +660,8 @@ function createReply(){
   var origOnlyMode = !bodyTr;
   var subjectLine=subjectTr||subject||'';
   var isInterleave = document.getElementById('interleave-mode').checked;
-  savePending({subjectLine:subjectLine, bodyTr:stripTH(bodyTr), bodyOrig:stripTH(bodyOrig), isHtml: isHtmlMode, isInterleave: isInterleave, origOnly: origOnlyMode});
+  var isPartial = clipboardOverride;
+  savePending({subjectLine:subjectLine, bodyTr:stripTH(bodyTr), bodyOrig:stripTH(bodyOrig), isHtml: isHtmlMode, isInterleave: isInterleave, origOnly: origOnlyMode, isPartial: isPartial});
   Office.context.mailbox.item.displayReplyAllForm({});
   showStatus('✓ 회신창이 열렸어요. 패널을 다시 한 번만 열면 자동 삽입돼요.','success');
 }
@@ -707,6 +708,7 @@ function autoInsert(){
         }
         clearPending();
         _currentPending = null;
+        try { localStorage.removeItem('th_interleave'); } catch(e){}
         document.getElementById('pending-desc').innerHTML='✅ 자동 삽입 완료! 회신창을 확인하고 보내세요.' + wcHtml;
       } else {
         document.getElementById('pending-desc').textContent='삽입 실패: '+(rSet.error&&rSet.error.message||'')+'. 다시 시도하려면 패널을 닫았다 여세요.';
@@ -730,9 +732,13 @@ function buildHtml(currentHtml,subjectLine,bodyTr,bodyOrig){
   var isInterleave = pending && pending.isInterleave;
   var translationSection;
   
-  if (isInterleave && window._interleaveData) {
+  var interleaveData = null;
+  if (isInterleave) {
+    try { var ild = localStorage.getItem('th_interleave'); if(ild) interleaveData = JSON.parse(ild); } catch(e){}
+  }
+  if (isInterleave && interleaveData) {
     // 교차 모드: 원문↔번역문 번갈아 배치
-    var data = window._interleaveData;
+    var data = interleaveData;
     var parts = ['<div>&nbsp;</div>'];
     for (var i = 0; i < Math.max(data.originals.length, data.translations.length); i++) {
       var orig = data.originals[i] || '';
@@ -766,7 +772,7 @@ function buildHtml(currentHtml,subjectLine,bodyTr,bodyOrig){
       // 기존 방식: 번역문 통째 + --- + 원문 통째
       var bodyTrHtml = isHtml ? bodyTr : esc(bodyTr);
       var bodyOrigHtml = isHtml ? bodyOrig : esc(bodyOrig);
-      var bodyOrigHtml = isHtml ? bodyOrig : esc(bodyOrig);
+      var isPartialOrig = pending && pending.isPartial;
       translationSection=
         '<div>&nbsp;</div>'+
         '<div style="'+mgb+'">[번역문 / Translation]</div>'+
@@ -776,9 +782,12 @@ function buildHtml(currentHtml,subjectLine,bodyTr,bodyOrig){
         '<div>---</div>'+
         '<div>&nbsp;</div>'+
         '<div style="'+mgb+'">[원문 / Original]</div>'+
-        '<div>&nbsp;</div>'+
-        '<div style="'+plain+'">'+bodyOrigHtml+'</div>'+
         '<div>&nbsp;</div>';
+      // 클립보드로 일부만 가져온 경우에만 bodyOrig 명시 삽입
+      if (isPartialOrig) {
+        var bodyOrigHtml = isHtml ? bodyOrig : esc(bodyOrig);
+        translationSection += '<div style="'+plain+'">'+bodyOrigHtml+'</div><div>&nbsp;</div>';
+      }
     }
   }
   var html=currentHtml;
