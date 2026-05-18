@@ -610,8 +610,14 @@ function runAI(){
 
   bodyPromise.then(function(payload){
     var promise;
-    if(provider==='claude') promise=trClaude(key,subject,payload.body,srcLang,tgtLang,payload.mode,modelId);
-    else promise=trOpenAI(key,subject,payload.body,srcLang,tgtLang,payload.mode);
+    if (payload.mode === 'html') {
+      // 서식 모드: 구조 보존 번역 (AI에게 표 자체를 보여주지 않음)
+      promise = translateHtmlStructurally(payload.body, provider, key, srcLang, tgtLang, modelId, subject);
+    } else if (provider === 'claude') {
+      promise = trClaude(key, subject, payload.body, srcLang, tgtLang, payload.mode, modelId);
+    } else {
+      promise = trOpenAI(key, subject, payload.body, srcLang, tgtLang, payload.mode);
+    }
 
     return promise.then(function(result){
       if(result.translatedSubject) document.getElementById('subject-translated').value=result.translatedSubject;
@@ -674,6 +680,57 @@ function extractQuotedHtml(html){
     }
   }
   return ''; // 인용 영역 못 찾음 → 호출자가 text 모드로 폴백
+}
+
+// 구조 보존 번역: HTML의 텍스트 노드만 추출해서 chunk 단위로 번역하고 원위치에 다시 채워넣음.
+// AI는 평면적인 텍스트 배열만 받으므로 표나 div 같은 구조를 망칠 수 없다.
+function translateHtmlStructurally(htmlString, provider, key, srcLang, tgtLang, modelId, subject){
+  return new Promise(function(resolve, reject){
+    var parser = new DOMParser();
+    var docu = parser.parseFromString('<!DOCTYPE html><html><body>'+htmlString+'</body></html>', 'text/html');
+    var root = docu.body;
+
+    // 모든 텍스트 노드를 순서대로 수집 (script/style 안쪽은 제외, 공백만 있는 노드도 제외)
+    var textNodes = [];
+    var walker = docu.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode: function(n){
+        var parentTag = n.parentNode && n.parentNode.tagName;
+        if (parentTag === 'SCRIPT' || parentTag === 'STYLE') return NodeFilter.FILTER_REJECT;
+        if (!n.nodeValue || !n.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    }, false);
+    var node;
+    while ((node = walker.nextNode())) textNodes.push(node);
+
+    if (textNodes.length === 0) {
+      resolve({translatedSubject: subject, translatedBody: htmlString});
+      return;
+    }
+
+    // 0번 슬롯에 subject, 그 뒤에 텍스트 노드들
+    var allChunks = [subject || '(none)'].concat(textNodes.map(function(n){ return n.nodeValue.trim(); }));
+
+    translateChunked(provider, key, allChunks, srcLang, tgtLang, modelId)
+      .then(function(translations){
+        var translatedSubject = (translations[0] && translations[0].trim()) || subject;
+        // 원본의 leading/trailing 공백을 보존하면서 텍스트만 교체
+        textNodes.forEach(function(n, i){
+          var tr = translations[i+1];
+          if (tr != null && tr !== '') {
+            var orig = n.nodeValue;
+            var leading = (orig.match(/^\s+/) || [''])[0];
+            var trailing = (orig.match(/\s+$/) || [''])[0];
+            n.nodeValue = leading + String(tr).trim() + trailing;
+          }
+        });
+        resolve({
+          translatedSubject: translatedSubject,
+          translatedBody: root.innerHTML
+        });
+      })
+      .catch(reject);
+  });
 }
 
 function trClaude(key,subject,body,srcLang,tgtLang,mode,modelId){
@@ -808,7 +865,7 @@ function translateChunked(provider, key, chunks, srcLang, tgtLang, modelId){
     return fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
       headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:modelId||'claude-haiku-4-5-20251001',max_tokens:8000,system:sysMsg,messages:[{role:'user',content:promptUser}]})
+      body:JSON.stringify({model:modelId||'claude-haiku-4-5-20251001',max_tokens:16000,system:sysMsg,messages:[{role:'user',content:promptUser}]})
     }).then(function(r){return r.text().then(function(t){
       if(!r.ok){var e=JSON.parse(t);throw new Error(e.error&&e.error.message||'HTTP '+r.status);}
       var data=JSON.parse(t);
@@ -819,7 +876,7 @@ function translateChunked(provider, key, chunks, srcLang, tgtLang, modelId){
     return fetch('https://api.openai.com/v1/chat/completions',{
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
-      body:JSON.stringify({model:'gpt-4o-mini',max_tokens:8000,messages:[{role:'system',content:sysMsg},{role:'user',content:promptUser}]})
+      body:JSON.stringify({model:'gpt-4o-mini',max_tokens:16000,messages:[{role:'system',content:sysMsg},{role:'user',content:promptUser}]})
     }).then(function(r){return r.text().then(function(t){
       if(!r.ok){var e=JSON.parse(t);throw new Error(e.error&&e.error.message||'HTTP '+r.status);}
       var data=JSON.parse(t);
