@@ -583,13 +583,22 @@ function runAI(){
   }
 
   // HTML 모드면 원문을 HTML로 다시 가져오기
+  // - 읽기 모드: 메일 본문 = 인용 영역 이전 (extractLatestHtml)
+  // - 회신창(compose): 원본 메일 = 인용 영역 이후 (extractQuotedHtml)
   var bodyPromise;
-  if (useHtmlMode && !isComposeMode) {
+  if (useHtmlMode) {
     bodyPromise = new Promise(function(resolve){
       Office.context.mailbox.item.body.getAsync(Office.CoercionType.Html,function(rH){
         if (rH.status === Office.AsyncResultStatus.Succeeded) {
-          var html = extractLatestHtml(rH.value||'');
-          resolve({mode:'html', body:html});
+          var fullHtml = rH.value || '';
+          var html = isComposeMode ? extractQuotedHtml(fullHtml) : extractLatestHtml(fullHtml);
+          // 추출된 HTML에서 태그 제외한 텍스트가 너무 짧으면(=인용 영역을 못 찾았거나 빈 답장) text로 폴백
+          var plainCheck = html.replace(/<[^>]+>/g,'').replace(/&nbsp;|\s/g,'').trim();
+          if (plainCheck.length < 10) {
+            resolve({mode:'text', body:body});
+          } else {
+            resolve({mode:'html', body:html});
+          }
         } else {
           resolve({mode:'text', body:body});
         }
@@ -637,6 +646,27 @@ function extractLatestHtml(html){
     }
   }
   return html;
+}
+
+// 회신창에서 인용된 원본 메일 부분만 추출 (extractLatestHtml의 반대)
+// 회신창 본문 = [사용자가 작성 중인 답장] + [인용 구분선/헤더] + [원본 메일]
+// 서식 모드에서는 [원본 메일] 부분을 번역해야 함
+function extractQuotedHtml(html){
+  var patterns = [
+    /<div[^>]*class=["\']?gmail_quote/i,
+    /<blockquote[^>]*type=["\']?cite["\']?/i,
+    /<div[^>]*id=["\']?divRplyFwdMsg/i,
+    /<hr[^>]*>\s*<b>(보낸 사람|From)/i,
+    /<hr[^>]*id=["\']?stopSpelling/i
+  ];
+  for (var i = 0; i < patterns.length; i++) {
+    var m = html.match(patterns[i]);
+    if (m) {
+      var idx = html.indexOf(m[0]);
+      return html.substring(idx); // 인용 영역 시작부터 끝까지
+    }
+  }
+  return ''; // 인용 영역 못 찾음 → 호출자가 text 모드로 폴백
 }
 
 function trClaude(key,subject,body,srcLang,tgtLang,mode,modelId){
