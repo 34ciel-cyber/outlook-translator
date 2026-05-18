@@ -165,6 +165,8 @@
 
 <script>
 var direction='ko-en', isComposeMode=false, dirManuallySet=false, clipboardOverride=false;
+// 서식 모드 번역 결과의 원본 HTML을 textarea 우회해서 보관 (textarea는 display용)
+var lastHtmlTranslation = null;
 function show(id){document.getElementById(id).classList.remove('hidden');}
 function hide(id){document.getElementById(id).classList.add('hidden');}
 
@@ -362,10 +364,14 @@ function extractQuotedBody(fullText){
 function insertDirectly(){
   var subject = document.getElementById('subject').value.trim();
   var subjectTr = document.getElementById('subject-translated').value.trim();
-  var bodyTr = document.getElementById('body-tr').value.trim();
+  var bodyTrText = document.getElementById('body-tr').value.trim();
   var bodyOrig = document.getElementById('body-orig').value.trim();
   var isHtmlMode = document.getElementById('format-mode').checked;
   var isInterleave = document.getElementById('interleave-mode').checked;
+  // 서식 모드 + 메모리에 보관된 HTML 번역이 있으면 그걸 사용 (textarea 우회).
+  // 사용자가 textarea에서 수정한 경우는 평문이므로 isHtmlMode 효력 상실.
+  var useStoredHtml = isHtmlMode && lastHtmlTranslation && lastHtmlTranslation.trim().length > 0;
+  var bodyTr = useStoredHtml ? lastHtmlTranslation : bodyTrText;
   var origOnlyMode = !bodyTr;
   var subjectLine = subjectTr || subject || '';
 
@@ -376,19 +382,19 @@ function insertDirectly(){
       showStatus('본문 가져오기 실패', 'error');
       return;
     }
-    // pending 데이터 임시 설정
+    // pending 데이터 임시 설정. HTML 번역물은 stripTH 통과시키면 안 됨 (정규식이 안전하지만 우회).
     _currentPending = {
       subjectLine: subjectLine,
-      bodyTr: stripTH(bodyTr),
+      bodyTr: useStoredHtml ? bodyTr : stripTH(bodyTr),
       bodyOrig: stripTH(bodyOrig),
-      isHtml: isHtmlMode,
+      isHtml: useStoredHtml,
       isInterleave: isInterleave,
       origOnly: origOnlyMode,
       isPartial: clipboardOverride
     };
 
-    // interleave 데이터도 확인
-    var newHtml = buildHtml(rGet.value || '', subjectLine, stripTH(bodyTr), stripTH(bodyOrig));
+    var bodyTrForBuild = useStoredHtml ? bodyTr : stripTH(bodyTr);
+    var newHtml = buildHtml(rGet.value || '', subjectLine, bodyTrForBuild, stripTH(bodyOrig));
 
     Office.context.mailbox.item.body.setAsync(newHtml, {coercionType: Office.CoercionType.Html}, function(rSet){
       _currentPending = null;
@@ -623,7 +629,9 @@ function runAI(){
       if(result.translatedSubject) document.getElementById('subject-translated').value=result.translatedSubject;
       document.getElementById('body-tr').value=result.translatedBody||'';
       if (payload.mode === 'html') {
-        // 표 구조 보존 검증: 입력에 <td>가 있었는데 출력에 없으면 AI가 펴버린 것
+        // 서식 모드 결과는 원본 HTML을 메모리에 보관 — textarea 우회용
+        lastHtmlTranslation = result.translatedBody || '';
+        // 표 구조 보존 검증
         var inTd = (payload.body.match(/<td[\s>]/gi) || []).length;
         var outTd = ((result.translatedBody||'').match(/<td[\s>]/gi) || []).length;
         if (inTd >= 2 && outTd < inTd * 0.7) {
@@ -632,6 +640,7 @@ function runAI(){
           showStatus('✓ 번역 완료 (서식 유지 모드). 회신 만들기를 누르세요.','success');
         }
       } else {
+        lastHtmlTranslation = null; // 일반 모드면 보관 안 함
         showStatus('✓ 번역 완료. 회신 만들기를 누르세요.','success');
       }
     });
@@ -914,15 +923,26 @@ function showStatus(msg,type){
 function createReply(){
   var subject=document.getElementById('subject').value.trim();
   var subjectTr=document.getElementById('subject-translated').value.trim();
-  var bodyTr=document.getElementById('body-tr').value.trim();
+  var bodyTrText=document.getElementById('body-tr').value.trim();
   var bodyOrig=document.getElementById('body-orig').value.trim();
   var isHtmlMode = document.getElementById('format-mode').checked;
+  // 서식 모드 + 보관된 HTML 번역이 있으면 그걸 사용
+  var useStoredHtml = isHtmlMode && lastHtmlTranslation && lastHtmlTranslation.trim().length > 0;
+  var bodyTr = useStoredHtml ? lastHtmlTranslation : bodyTrText;
   // 번역문 없으면 원문만 삽입 (번역 없이 원문만 회신)
   var origOnlyMode = !bodyTr;
   var subjectLine=subjectTr||subject||'';
   var isInterleave = document.getElementById('interleave-mode').checked;
   var isPartial = clipboardOverride;
-  savePending({subjectLine:subjectLine, bodyTr:stripTH(bodyTr), bodyOrig:stripTH(bodyOrig), isHtml: isHtmlMode, isInterleave: isInterleave, origOnly: origOnlyMode, isPartial: isPartial});
+  savePending({
+    subjectLine:subjectLine,
+    bodyTr: useStoredHtml ? bodyTr : stripTH(bodyTr),
+    bodyOrig:stripTH(bodyOrig),
+    isHtml: useStoredHtml,
+    isInterleave: isInterleave,
+    origOnly: origOnlyMode,
+    isPartial: isPartial
+  });
   Office.context.mailbox.item.displayReplyAllForm({});
   showStatus('✓ 회신창이 열렸어요. 패널을 다시 한 번만 열면 자동 삽입돼요.','success');
 }
