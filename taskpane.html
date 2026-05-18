@@ -64,32 +64,6 @@
     .format-toggle { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #666; margin-top: 8px; cursor: pointer; user-select: none; }
     .format-toggle input { cursor: pointer; }
     .format-toggle .info { color: #888; font-size: 10px; margin-left: 4px; }
-    /* 손번역 모달 */
-    .manual-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 9998; display: none; }
-    .manual-overlay.active { display: block; }
-    .manual-modal { position: fixed; inset: 16px; background: #fff; border-radius: 8px; box-shadow: 0 8px 32px rgba(0,0,0,0.18); z-index: 9999; display: none; flex-direction: column; overflow: hidden; }
-    .manual-modal.active { display: flex; }
-    .manual-header { padding: 14px 18px; border-bottom: 1px solid #e5e5e5; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
-    .manual-title { font-size: 14px; font-weight: 600; color: #4472C4; }
-    .manual-subtitle { font-size: 11px; color: #888; margin-top: 3px; }
-    .manual-close { background: none; border: none; font-size: 20px; color: #888; cursor: pointer; padding: 0 6px; line-height: 1; }
-    .manual-close:hover { color: #333; }
-    .manual-body { flex: 1; overflow-y: auto; padding: 14px 18px; background: #fafbfd; }
-    .manual-pair { background: #fff; border: 1px solid #e0e6f0; border-radius: 6px; padding: 10px 12px; margin-bottom: 10px; }
-    .manual-pair-num { font-size: 10px; color: #888; margin-bottom: 4px; }
-    .manual-pair-orig { font-size: 12px; color: #333; line-height: 1.5; padding: 6px 8px; background: #f5f7fb; border-radius: 4px; margin-bottom: 6px; white-space: pre-wrap; word-break: break-word; }
-    .manual-pair-tr { width: 100%; min-height: 32px; font-size: 12px; line-height: 1.5; padding: 6px 8px; border: 1px solid #c8d3e2; border-radius: 4px; font-family: inherit; box-sizing: border-box; resize: vertical; }
-    .manual-pair-tr:focus { outline: none; border-color: #4472C4; box-shadow: 0 0 0 2px rgba(68,114,196,0.15); }
-    .manual-pair.filled { border-color: #2e8b3e; }
-    .manual-pair.filled .manual-pair-tr { background: #f6fbf7; }
-    .manual-footer { padding: 12px 18px; border-top: 1px solid #e5e5e5; display: flex; gap: 8px; justify-content: space-between; align-items: center; flex-shrink: 0; background: #fff; }
-    .manual-progress { font-size: 11px; color: #666; }
-    .manual-progress b { color: #4472C4; }
-    .manual-actions { display: flex; gap: 6px; }
-    .manual-btn { padding: 7px 14px; font-size: 12px; border-radius: 4px; cursor: pointer; border: 1px solid #c8d3e2; background: #fff; color: #333; }
-    .manual-btn-primary { background: #2e8b3e; color: #fff; border-color: #2e8b3e; font-weight: 600; }
-    .manual-btn-primary:disabled { background: #c8c8c8; border-color: #c8c8c8; cursor: not-allowed; }
-    .manual-btn-secondary { background: #4472C4; color: #fff; border-color: #4472C4; }
   </style>
 </head>
 <body>
@@ -182,26 +156,6 @@
 </div>
 
 <div id="compose-status" class="status hidden"></div>
-
-<!-- 손번역 모달 -->
-<div id="manual-overlay" class="manual-overlay" onclick="closeManualMode()"></div>
-<div id="manual-modal" class="manual-modal" role="dialog" aria-labelledby="manual-title-text">
-  <div class="manual-header">
-    <div>
-      <div class="manual-title" id="manual-title-text">✏️ 손번역 모드</div>
-      <div class="manual-subtitle">각 칸에 번역만 채워주세요. 표·단락 등 서식은 자동으로 보존됩니다.</div>
-    </div>
-    <button class="manual-close" onclick="closeManualMode()" title="닫기">×</button>
-  </div>
-  <div class="manual-body" id="manual-body"></div>
-  <div class="manual-footer">
-    <div class="manual-progress" id="manual-progress">0 / 0 입력 완료</div>
-    <div class="manual-actions">
-      <button class="manual-btn manual-btn-secondary" onclick="fillAllWithOriginal()" title="모든 빈 칸에 원문 그대로 채우기 — 그 위에 수정해도 됩니다">원문으로 모두 채우기</button>
-      <button class="manual-btn manual-btn-primary" id="manual-apply-btn" onclick="applyManualTranslation()">번역 적용</button>
-    </div>
-  </div>
-</div>
 
 <script>
 var direction='ko-en', isComposeMode=false, dirManuallySet=false, clipboardOverride=false;
@@ -485,155 +439,60 @@ function pasteFromClipboard(){
 }
 
 // ─── 손번역 모드 ─────────────────────────────────────────────
-// 상태: 현재 모달에 보여지고 있는 노드 정보
-var _manualState = null;  // { docu, root, textNodes, subject }
+// 동작: 회신 본문에 원문을 서식 그대로 박아넣음 → 사용자가 회신창에서 직접 셀별로 편집.
+// textarea는 너무 좁아서 회신 본문이 진짜 작업 공간.
 
 function openManualMode(){
+  var btn = document.getElementById('manual-btn');
+  btn.disabled = true;
+  var origLabel = btn.textContent;
+  btn.textContent = '준비 중...';
+  showStatus('손번역 양식을 만드는 중...');
+
   Office.context.mailbox.item.body.getAsync(Office.CoercionType.Html, function(rH){
     if (rH.status !== Office.AsyncResultStatus.Succeeded) {
+      btn.disabled = false; btn.textContent = origLabel;
       showStatus('회신 본문을 가져오지 못했어요.', 'error');
       return;
     }
-    var quotedHtml = extractQuotedHtml(rH.value || '');
+    var fullHtml = rH.value || '';
+    var quotedHtml = extractQuotedHtml(fullHtml);
     var plainCheck = quotedHtml.replace(/<[^>]+>/g,'').replace(/&nbsp;|\s/g,'').trim();
+    console.log('[TH] manual mode diagnostics:');
+    console.log('  fullHtml length:', fullHtml.length);
+    console.log('  fullHtml first 500 chars:', fullHtml.substring(0, 500));
+    console.log('  quotedHtml length:', quotedHtml.length);
+    console.log('  plainCheck length:', plainCheck.length);
     if (plainCheck.length < 10) {
-      showStatus('인용 원문을 찾지 못했어요. 일반 모드의 번역문 칸에 직접 입력해주세요.', 'error');
+      btn.disabled = false; btn.textContent = origLabel;
+      // 폴백: 패턴 매칭 실패 시, 사용자가 작성 중인 빈 답장 + 인용 영역 전체를 그대로 두고 안내만
+      showStatus('인용 원문 영역을 자동으로 찾지 못했어요. F12를 눌러 콘솔에서 [TH] 로그를 확인해주세요. 회신을 한 번 닫았다 [전체 회신]으로 다시 여는 것도 도움이 됩니다.', 'error');
       return;
     }
-    // DOM 파싱 + 텍스트 노드 추출 (translateHtmlStructurally와 동일한 메커니즘)
-    var parser = new DOMParser();
-    var docu = parser.parseFromString('<!DOCTYPE html><html><body>'+quotedHtml+'</body></html>', 'text/html');
-    var root = docu.body;
-    var textNodes = [];
-    var walker = docu.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-      acceptNode: function(n){
-        var parentTag = n.parentNode && n.parentNode.tagName;
-        if (parentTag === 'SCRIPT' || parentTag === 'STYLE') return NodeFilter.FILTER_REJECT;
-        if (!n.nodeValue || !n.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
-        return NodeFilter.FILTER_ACCEPT;
+    // 회신 본문에 [번역문/Translation] 자리표시자 + 원문(서식 그대로) 박아넣기
+    var subjectLine = document.getElementById('subject-translated').value.trim()
+                      || document.getElementById('subject').value.trim() || '';
+    // _currentPending 임시 설정 — buildHtml이 isHtml: true로 동작하게
+    _currentPending = {
+      subjectLine: subjectLine,
+      bodyTr: quotedHtml,           // 번역문 자리에 원문 HTML 그대로 넣음 → 사용자가 그 위에 덮어쓰면 됨
+      bodyOrig: '',                  // 원문 별도 섹션은 빈 값 (아웃룩 자동 인용이 [원문/Original] 아래 자동으로 들어옴)
+      isHtml: true,
+      isInterleave: false,
+      origOnly: false,
+      isPartial: false
+    };
+    var newHtml = buildHtml(fullHtml, subjectLine, quotedHtml, '');
+    Office.context.mailbox.item.body.setAsync(newHtml, {coercionType: Office.CoercionType.Html}, function(rSet){
+      _currentPending = null;
+      btn.disabled = false; btn.textContent = origLabel;
+      if (rSet.status === Office.AsyncResultStatus.Succeeded) {
+        showStatus('✓ 원문이 [번역문/Translation] 자리에 서식 그대로 들어갔어요. 회신 본문에서 직접 번역으로 덮어쓰세요. 아래쪽 [원문/Original] 영역은 참고용입니다.', 'success');
+      } else {
+        showStatus('삽입 실패: ' + (rSet.error && rSet.error.message || ''), 'error');
       }
-    }, false);
-    var node;
-    while ((node = walker.nextNode())) textNodes.push(node);
-    if (textNodes.length === 0) {
-      showStatus('번역할 텍스트가 없어요.', 'error');
-      return;
-    }
-    var subject = document.getElementById('subject').value.trim();
-    _manualState = { docu: docu, root: root, textNodes: textNodes, subject: subject };
-    renderManualPairs();
-    document.getElementById('manual-overlay').classList.add('active');
-    document.getElementById('manual-modal').classList.add('active');
-  });
-}
-
-function renderManualPairs(){
-  var body = document.getElementById('manual-body');
-  body.innerHTML = '';
-  var state = _manualState;
-  if (!state) return;
-  // 제목 짝 (선택사항)
-  var pairs = [];
-  if (state.subject) {
-    pairs.push({ orig: state.subject, type: 'subject' });
-  }
-  state.textNodes.forEach(function(n, i){
-    pairs.push({ orig: n.nodeValue.trim(), type: 'node', index: i });
-  });
-  pairs.forEach(function(p, idx){
-    var div = document.createElement('div');
-    div.className = 'manual-pair';
-    div.dataset.idx = idx;
-    var label = (p.type === 'subject') ? '제목' : ('#' + (idx + (state.subject ? 0 : 1)));
-    div.innerHTML =
-      '<div class="manual-pair-num">' + esc(label) + '</div>' +
-      '<div class="manual-pair-orig"></div>' +
-      '<textarea class="manual-pair-tr" placeholder="번역 입력..." rows="1"></textarea>';
-    div.querySelector('.manual-pair-orig').textContent = p.orig;
-    var ta = div.querySelector('.manual-pair-tr');
-    // 자동 높이 조절
-    ta.addEventListener('input', function(){
-      ta.style.height = 'auto';
-      ta.style.height = (ta.scrollHeight + 2) + 'px';
-      div.classList.toggle('filled', ta.value.trim().length > 0);
-      updateManualProgress();
     });
-    // 초기 행 수: 원문 길이 기반
-    var lines = Math.max(1, Math.ceil(p.orig.length / 50));
-    ta.rows = Math.min(lines, 6);
-    body.appendChild(div);
   });
-  updateManualProgress();
-}
-
-function updateManualProgress(){
-  var pairs = document.querySelectorAll('.manual-pair');
-  var filled = 0;
-  pairs.forEach(function(d){
-    var ta = d.querySelector('.manual-pair-tr');
-    if (ta && ta.value.trim().length > 0) filled++;
-  });
-  var el = document.getElementById('manual-progress');
-  if (el) el.innerHTML = '<b>' + filled + '</b> / ' + pairs.length + ' 입력 완료';
-}
-
-function fillAllWithOriginal(){
-  document.querySelectorAll('.manual-pair').forEach(function(d){
-    var ta = d.querySelector('.manual-pair-tr');
-    var orig = d.querySelector('.manual-pair-orig');
-    if (ta && orig && !ta.value.trim()) {
-      ta.value = orig.textContent;
-      ta.dispatchEvent(new Event('input'));
-    }
-  });
-}
-
-function closeManualMode(){
-  document.getElementById('manual-overlay').classList.remove('active');
-  document.getElementById('manual-modal').classList.remove('active');
-}
-
-function applyManualTranslation(){
-  var state = _manualState;
-  if (!state) return;
-  var pairs = document.querySelectorAll('.manual-pair');
-  var translatedSubject = null;
-  var hasSubjectPair = !!state.subject;
-  // 번역값 수집
-  var translations = [];
-  pairs.forEach(function(d, idx){
-    var ta = d.querySelector('.manual-pair-tr');
-    var val = ta ? ta.value : '';
-    if (idx === 0 && hasSubjectPair) {
-      translatedSubject = val.trim();
-    } else {
-      translations.push(val);
-    }
-  });
-  // 빈 칸은 원문 유지
-  state.textNodes.forEach(function(n, i){
-    var tr = translations[i];
-    if (tr != null && tr.trim() !== '') {
-      var orig = n.nodeValue;
-      var leading = (orig.match(/^\s+/) || [''])[0];
-      var trailing = (orig.match(/\s+$/) || [''])[0];
-      n.nodeValue = leading + tr.trim() + trailing;
-    }
-    // 빈 값이면 원본 그대로 유지 (변경 안 함)
-  });
-  var resultHtml = state.root.innerHTML;
-  // body-tr textarea엔 평문 미리보기, 메모리엔 HTML
-  var preview = translations.filter(function(t){return t && t.trim();}).join('\n');
-  document.getElementById('body-tr').value = preview;
-  lastHtmlTranslation = resultHtml;
-  if (translatedSubject) {
-    document.getElementById('subject-translated').value = translatedSubject;
-  }
-  // 서식 모드 자동 ON — 회신 삽입 시 HTML을 쓰도록
-  document.getElementById('format-mode').checked = true;
-  closeManualMode();
-  _manualState = null;
-  showStatus('✓ 손번역 적용됨. "현재 회신에 삽입"을 누르면 서식 그대로 회신에 들어갑니다.', 'success');
 }
 
 function setDir(d, isManual){
