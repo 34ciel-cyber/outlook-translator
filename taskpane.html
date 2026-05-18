@@ -64,23 +64,43 @@
     .format-toggle { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #666; margin-top: 8px; cursor: pointer; user-select: none; }
     .format-toggle input { cursor: pointer; }
     .format-toggle .info { color: #888; font-size: 10px; margin-left: 4px; }
+    /* 손번역 모달 */
+    .manual-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 9998; display: none; }
+    .manual-overlay.active { display: block; }
+    .manual-modal { position: fixed; inset: 16px; background: #fff; border-radius: 8px; box-shadow: 0 8px 32px rgba(0,0,0,0.18); z-index: 9999; display: none; flex-direction: column; overflow: hidden; }
+    .manual-modal.active { display: flex; }
+    .manual-header { padding: 14px 18px; border-bottom: 1px solid #e5e5e5; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+    .manual-title { font-size: 14px; font-weight: 600; color: #4472C4; }
+    .manual-subtitle { font-size: 11px; color: #888; margin-top: 3px; }
+    .manual-close { background: none; border: none; font-size: 20px; color: #888; cursor: pointer; padding: 0 6px; line-height: 1; }
+    .manual-close:hover { color: #333; }
+    .manual-body { flex: 1; overflow-y: auto; padding: 14px 18px; background: #fafbfd; }
+    .manual-pair { background: #fff; border: 1px solid #e0e6f0; border-radius: 6px; padding: 10px 12px; margin-bottom: 10px; }
+    .manual-pair-num { font-size: 10px; color: #888; margin-bottom: 4px; }
+    .manual-pair-orig { font-size: 12px; color: #333; line-height: 1.5; padding: 6px 8px; background: #f5f7fb; border-radius: 4px; margin-bottom: 6px; white-space: pre-wrap; word-break: break-word; }
+    .manual-pair-tr { width: 100%; min-height: 32px; font-size: 12px; line-height: 1.5; padding: 6px 8px; border: 1px solid #c8d3e2; border-radius: 4px; font-family: inherit; box-sizing: border-box; resize: vertical; }
+    .manual-pair-tr:focus { outline: none; border-color: #4472C4; box-shadow: 0 0 0 2px rgba(68,114,196,0.15); }
+    .manual-pair.filled { border-color: #2e8b3e; }
+    .manual-pair.filled .manual-pair-tr { background: #f6fbf7; }
+    .manual-footer { padding: 12px 18px; border-top: 1px solid #e5e5e5; display: flex; gap: 8px; justify-content: space-between; align-items: center; flex-shrink: 0; background: #fff; }
+    .manual-progress { font-size: 11px; color: #666; }
+    .manual-progress b { color: #4472C4; }
+    .manual-actions { display: flex; gap: 6px; }
+    .manual-btn { padding: 7px 14px; font-size: 12px; border-radius: 4px; cursor: pointer; border: 1px solid #c8d3e2; background: #fff; color: #333; }
+    .manual-btn-primary { background: #2e8b3e; color: #fff; border-color: #2e8b3e; font-weight: 600; }
+    .manual-btn-primary:disabled { background: #c8c8c8; border-color: #c8c8c8; cursor: not-allowed; }
+    .manual-btn-secondary { background: #4472C4; color: #fff; border-color: #4472C4; }
   </style>
 </head>
 <body>
 <div class="format-tag"><span class="dot"></span>맑은 고딕 11pt · #4472C4</div>
 
 <div id="banner-read" class="banner banner-read hidden">
-  <b>받은 메일 모드</b> — 여기서도 가능하지만, <b>전체 회신을 먼저 누르고</b> 회신창에서 Translation Helper를 여는 게 더 편해요.
-</div>
-<div id="banner-compose-empty" class="banner banner-compose hidden">
-  <b>회신 작성 모드</b> — 받은 메일에서 먼저 번역해주세요.
+  <b>⚠ 받은 메일 모드에서는 사용할 수 없어요.</b><br>
+  먼저 받은 메일에서 <b>전체 회신</b>(또는 회신)을 누른 뒤, <b>회신창에서 Translation Helper를 다시 열어주세요.</b>
 </div>
 <div id="banner-compose" class="banner banner-compose hidden">
   <b>회신 작성 모드</b> — 인용된 원문이 자동으로 들어왔어요. 번역 후 <b>현재 회신에 삽입</b>을 누르면 바로 적용돼요.
-</div>
-<div id="pending-box" class="pending-box hidden">
-  <div class="pending-title">번역 자동 삽입 중...</div>
-  <div class="pending-desc" id="pending-desc"></div>
 </div>
 
 <span class="settings-toggle" onclick="toggleSettings()">⚙ API 키 설정</span>
@@ -127,10 +147,9 @@
     <div class="word-count-box" id="word-count-box"><span class="wc-empty" id="word-count">원문을 입력하면 단어 수가 표시됩니다</span></div>
     <div class="src-hint">메일에서 텍스트 선택 시 그 부분, 안 하면 가장 최근 메일 본문이 들어와요.</div>
     <textarea id="body-orig" placeholder="원문 본문" oninput="onOrigChange()"></textarea>
-    <div id="img-warning" class="img-warning hidden">⚠️ 이 메일에 이미지가 포함되어 있어요. 이미지는 자동 처리되지 않으니, 텍스트만 드래그해서 선택한 후 [↻ 다시 불러오기]를 눌러주세요.</div>
+    <div id="img-warning" class="img-warning hidden">⚠️ 이 메일에 이미지가 포함되어 있어요. 이미지는 자동 처리되지 않으니, 필요하면 텍스트만 선택해 복사한 뒤 [📋 클립보드에서 가져오기]를 눌러주세요.</div>
     <div class="reload-row" style="gap:6px;">
       <button class="btn-small" onclick="pasteFromClipboard()" style="background:#4472C4;color:#fff;border-color:#4472C4;">📋 클립보드에서 가져오기</button>
-      <button class="btn-small" onclick="reloadSource()">↻ 전체 본문 불러오기</button>
     </div>
     <label class="format-toggle">
       <input type="checkbox" id="format-mode" />
@@ -153,15 +172,36 @@
         <option value="openai">ChatGPT</option>
       </select>
       <button class="ai-btn" id="ai-btn" onclick="runAI()">AI 자동 번역 ↗</button>
+      <button class="btn-small" id="manual-btn" onclick="openManualMode()" title="원문을 셀 단위로 보여드릴게요. 직접 번역만 채워넣으면 서식 그대로 유지됩니다.">✏️ 손번역 모드</button>
     </div>
-    <textarea id="body-tr" placeholder="번역문을 직접 입력하거나 위 버튼으로 AI 자동 번역"></textarea>
+    <textarea id="body-tr" placeholder="번역문을 직접 입력하거나 위 버튼으로 AI 자동 번역 / 손번역"></textarea>
   </div>
 
   <div id="status-msg" class="status hidden"></div>
-  <button class="btn-green" id="create-btn" onclick="createReply()">📧 회신 만들기</button>
+  <button class="btn-green" id="create-btn" onclick="insertDirectly()">📧 현재 회신에 삽입</button>
 </div>
 
 <div id="compose-status" class="status hidden"></div>
+
+<!-- 손번역 모달 -->
+<div id="manual-overlay" class="manual-overlay" onclick="closeManualMode()"></div>
+<div id="manual-modal" class="manual-modal" role="dialog" aria-labelledby="manual-title-text">
+  <div class="manual-header">
+    <div>
+      <div class="manual-title" id="manual-title-text">✏️ 손번역 모드</div>
+      <div class="manual-subtitle">각 칸에 번역만 채워주세요. 표·단락 등 서식은 자동으로 보존됩니다.</div>
+    </div>
+    <button class="manual-close" onclick="closeManualMode()" title="닫기">×</button>
+  </div>
+  <div class="manual-body" id="manual-body"></div>
+  <div class="manual-footer">
+    <div class="manual-progress" id="manual-progress">0 / 0 입력 완료</div>
+    <div class="manual-actions">
+      <button class="manual-btn manual-btn-secondary" onclick="fillAllWithOriginal()" title="모든 빈 칸에 원문 그대로 채우기 — 그 위에 수정해도 됩니다">원문으로 모두 채우기</button>
+      <button class="manual-btn manual-btn-primary" id="manual-apply-btn" onclick="applyManualTranslation()">번역 적용</button>
+    </div>
+  </div>
+</div>
 
 <script>
 var direction='ko-en', isComposeMode=false, dirManuallySet=false, clipboardOverride=false;
@@ -252,52 +292,39 @@ Office.onReady(function(info){
   if(info.host!==Office.HostType.Outlook) return;
   var item=Office.context.mailbox.item;
   isComposeMode=typeof item.subject!=='string';
-  if(isComposeMode){
-    // 먼저 pending 데이터 확인 (읽기 모드에서 온 경우)
-    var pending=getPending();
-    if(pending){
-      show('pending-box');
-      document.getElementById('pending-desc').textContent='제목: '+pending.subjectLine;
-      setTimeout(function(){ autoInsert(); }, 400);
-    } else {
-      // 회신창에서 직접 시작 — full UI 보여주기
-      show('banner-compose');
-      show('read-ui');
-      // 회신 만들기 버튼 → 현재 창에 삽입 버튼으로 변경
-      document.getElementById('create-btn').textContent = '📧 현재 회신에 삽입';
-      document.getElementById('create-btn').onclick = insertDirectly;
-      // 제목 가져오기
-      item.subject.getAsync(function(r){
-        if(r.status===Office.AsyncResultStatus.Succeeded){
-          var subj = (r.value||'').replace(/^(RE:\s*|\[EXT\]\s*|Fw:\s*)+/gi,'').trim();
-          document.getElementById('subject').value = subj;
-        }
-      });
-      // 회신 본문에서 인용된 원문 추출
-      extractBodyFromCompose();
-    }
-  } else {
+  if(!isComposeMode){
+    // 읽기 모드 — UI 차단, 안내만 표시
     show('banner-read');
-    show('read-ui');
-    document.getElementById('subject').value=(item.subject||'').replace(/^(RE:\s*|\[EXT\]\s*|Fw:\s*)+/gi,'').trim();
-    reloadSource();
-    var engineSelect=document.getElementById('engine-select');
-    if(localStorage.getItem(KEY_MAP.claude)) engineSelect.value='claude-haiku';
-    else if(localStorage.getItem(KEY_MAP.openai)) engineSelect.value='openai';
-    
-    // 키보드 단축키
-    document.addEventListener('keydown', function(e){
-      if(e.ctrlKey && e.key === 'Enter'){
-        if(e.shiftKey){
-          e.preventDefault();
-          createReply();
-        } else {
-          e.preventDefault();
-          runAI();
-        }
-      }
-    });
+    return;
   }
+  // 회신창 — 메인 워크플로우
+  show('banner-compose');
+  show('read-ui');
+  // 제목 가져오기
+  item.subject.getAsync(function(r){
+    if(r.status===Office.AsyncResultStatus.Succeeded){
+      var subj = (r.value||'').replace(/^(RE:\s*|\[EXT\]\s*|Fw:\s*)+/gi,'').trim();
+      document.getElementById('subject').value = subj;
+    }
+  });
+  // 회신 본문에서 인용된 원문 추출
+  extractBodyFromCompose();
+  // 엔진 기본값
+  var engineSelect=document.getElementById('engine-select');
+  if(localStorage.getItem(KEY_MAP.claude)) engineSelect.value='claude-haiku';
+  else if(localStorage.getItem(KEY_MAP.openai)) engineSelect.value='openai';
+  // 키보드 단축키
+  document.addEventListener('keydown', function(e){
+    if(e.ctrlKey && e.key === 'Enter'){
+      if(e.shiftKey){
+        e.preventDefault();
+        insertDirectly();
+      } else {
+        e.preventDefault();
+        runAI();
+      }
+    }
+  });
 });
 
 function setSrcBadge(label,ok){
@@ -359,6 +386,10 @@ function extractQuotedBody(fullText){
     .filter(function(l){return !l.match(/번역\s*부탁드립니다|Please\s*translate/i);})
     .join('\n').trim();
 }
+
+// buildHtml이 참조하는 임시 상태 (insertDirectly 안에서만 set)
+var _currentPending = null;
+function getPendingForBuild(){ return _currentPending; }
 
 // 회신창에 직접 삽입
 function insertDirectly(){
@@ -453,82 +484,156 @@ function pasteFromClipboard(){
   }
 }
 
-function reloadSource(){
-  console.log('[TH] reloadSource called');
-  clipboardOverride = false;
-  var item=Office.context.mailbox.item;
-  if(!item){ console.log('[TH] no item'); return; }
-  console.log('[TH] item exists, has getSelectedDataAsync:', !!item.getSelectedDataAsync);
-  if(item.getSelectedDataAsync){
-    item.getSelectedDataAsync(Office.CoercionType.Text,function(r){
-      console.log('[TH] getSelectedDataAsync result:', r.status, r.value);
-      if(r.status===Office.AsyncResultStatus.Succeeded){
-        if (r.value && r.value.data && r.value.data.trim()){
-          var selectedText = r.value.data.trim();
-          console.log('[TH] Selected text length:', selectedText.length);
-          var ta = document.getElementById('body-orig');
-          ta.value = selectedText;
-          ta.dispatchEvent(new Event('input', { bubbles: true }));
-          setSrcBadge('선택한 부분', true);
-          autoDetectAndSetDir(selectedText);
-          updateWordCount(selectedText);
-          document.getElementById('img-warning').classList.add('hidden');
-          showStatus('✓ 선택한 부분 ' + selectedText.length + '자 가져옴', 'success');
-        } else {
-          console.log('[TH] No selection, falling back to extractBody');
-          showStatus('선택된 텍스트 없음 → 가장 최근 메일 본문 가져옵니다.', '');
-          extractBody();
-        }
-      } else {
-        console.log('[TH] getSelectedDataAsync FAILED:', r.error);
-        showStatus('선택 가져오기 실패: ' + (r.error && r.error.message || '알 수 없음'), 'error');
-        extractBody();
-      }
-    });
-  } else {
-    console.log('[TH] No getSelectedDataAsync, using extractBody');
-    extractBody();
-  }
-}
-function extractBody(){
-  // 텍스트 본문 + HTML 본문 둘 다 가져오기 (이미지 체크용)
-  Office.context.mailbox.item.body.getAsync(Office.CoercionType.Text,function(r){
-    if(r.status!==Office.AsyncResultStatus.Succeeded){setSrcBadge('실패',false);return;}
-    if (clipboardOverride) {
-      console.log('[TH] extractBody skipped — clipboard override active');
+// ─── 손번역 모드 ─────────────────────────────────────────────
+// 상태: 현재 모달에 보여지고 있는 노드 정보
+var _manualState = null;  // { docu, root, textNodes, subject }
+
+function openManualMode(){
+  Office.context.mailbox.item.body.getAsync(Office.CoercionType.Html, function(rH){
+    if (rH.status !== Office.AsyncResultStatus.Succeeded) {
+      showStatus('회신 본문을 가져오지 못했어요.', 'error');
       return;
     }
-    var text = extractLatest(r.value||'');
-    var ta = document.getElementById('body-orig');
-    ta.value = text;
-    ta.dispatchEvent(new Event('input', { bubbles: true }));
-    setSrcBadge('자동 입력',true);
-    autoDetectAndSetDir(text);
-    updateWordCount(text);
-    // 이미지 체크
-    Office.context.mailbox.item.body.getAsync(Office.CoercionType.Html,function(rH){
-      if(rH.status===Office.AsyncResultStatus.Succeeded){
-        var hasImg = /<img[^>]+src=["\']?data:image/i.test(rH.value||'') || /<img[^>]+src=/i.test(rH.value||'');
-        document.getElementById('img-warning').classList.toggle('hidden', !hasImg);
+    var quotedHtml = extractQuotedHtml(rH.value || '');
+    var plainCheck = quotedHtml.replace(/<[^>]+>/g,'').replace(/&nbsp;|\s/g,'').trim();
+    if (plainCheck.length < 10) {
+      showStatus('인용 원문을 찾지 못했어요. 일반 모드의 번역문 칸에 직접 입력해주세요.', 'error');
+      return;
+    }
+    // DOM 파싱 + 텍스트 노드 추출 (translateHtmlStructurally와 동일한 메커니즘)
+    var parser = new DOMParser();
+    var docu = parser.parseFromString('<!DOCTYPE html><html><body>'+quotedHtml+'</body></html>', 'text/html');
+    var root = docu.body;
+    var textNodes = [];
+    var walker = docu.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode: function(n){
+        var parentTag = n.parentNode && n.parentNode.tagName;
+        if (parentTag === 'SCRIPT' || parentTag === 'STYLE') return NodeFilter.FILTER_REJECT;
+        if (!n.nodeValue || !n.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
       }
-    });
+    }, false);
+    var node;
+    while ((node = walker.nextNode())) textNodes.push(node);
+    if (textNodes.length === 0) {
+      showStatus('번역할 텍스트가 없어요.', 'error');
+      return;
+    }
+    var subject = document.getElementById('subject').value.trim();
+    _manualState = { docu: docu, root: root, textNodes: textNodes, subject: subject };
+    renderManualPairs();
+    document.getElementById('manual-overlay').classList.add('active');
+    document.getElementById('manual-modal').classList.add('active');
   });
 }
-function extractLatest(text){
-  var lines=text.split('\n');
-  var qi=-1;
-  for(var i=0;i<lines.length;i++){if(/^(보낸 사람|보낸사람|From)\s*:/i.test(lines[i].trim())){qi=i;break;}}
-  if(qi===-1) return lines.filter(function(l){return!l.match(/번역\s*부탁드립니다|Please\s*translate/i);}).join('\n').trim();
-  var rb=lines.slice(0,qi).filter(function(l){return!l.match(/번역\s*부탁드립니다|Please\s*translate/i);}).join('\n').trim();
-  if(rb.length>10) return rb;
-  var start=qi;
-  for(var i=qi;i<lines.length;i++){
-    var t=lines[i].trim();
-    if(!/^(보낸 사람|보낸사람|보낸 날짜|보낸날짜|받는 사람|받는사람|참조|숨은 참조|제목|From|Sent|To|Cc|Bcc|Subject)\s*:/i.test(t)&&t.length>0){start=i;break;}
+
+function renderManualPairs(){
+  var body = document.getElementById('manual-body');
+  body.innerHTML = '';
+  var state = _manualState;
+  if (!state) return;
+  // 제목 짝 (선택사항)
+  var pairs = [];
+  if (state.subject) {
+    pairs.push({ orig: state.subject, type: 'subject' });
   }
-  var end=lines.length;
-  for(var i=start+1;i<lines.length;i++){if(/^(보낸 사람|보낸사람|From)\s*:/i.test(lines[i].trim())){end=i;break;}}
-  return lines.slice(start,end).filter(function(l){return!l.match(/번역\s*부탁드립니다|Please\s*translate/i);}).join('\n').trim();
+  state.textNodes.forEach(function(n, i){
+    pairs.push({ orig: n.nodeValue.trim(), type: 'node', index: i });
+  });
+  pairs.forEach(function(p, idx){
+    var div = document.createElement('div');
+    div.className = 'manual-pair';
+    div.dataset.idx = idx;
+    var label = (p.type === 'subject') ? '제목' : ('#' + (idx + (state.subject ? 0 : 1)));
+    div.innerHTML =
+      '<div class="manual-pair-num">' + esc(label) + '</div>' +
+      '<div class="manual-pair-orig"></div>' +
+      '<textarea class="manual-pair-tr" placeholder="번역 입력..." rows="1"></textarea>';
+    div.querySelector('.manual-pair-orig').textContent = p.orig;
+    var ta = div.querySelector('.manual-pair-tr');
+    // 자동 높이 조절
+    ta.addEventListener('input', function(){
+      ta.style.height = 'auto';
+      ta.style.height = (ta.scrollHeight + 2) + 'px';
+      div.classList.toggle('filled', ta.value.trim().length > 0);
+      updateManualProgress();
+    });
+    // 초기 행 수: 원문 길이 기반
+    var lines = Math.max(1, Math.ceil(p.orig.length / 50));
+    ta.rows = Math.min(lines, 6);
+    body.appendChild(div);
+  });
+  updateManualProgress();
+}
+
+function updateManualProgress(){
+  var pairs = document.querySelectorAll('.manual-pair');
+  var filled = 0;
+  pairs.forEach(function(d){
+    var ta = d.querySelector('.manual-pair-tr');
+    if (ta && ta.value.trim().length > 0) filled++;
+  });
+  var el = document.getElementById('manual-progress');
+  if (el) el.innerHTML = '<b>' + filled + '</b> / ' + pairs.length + ' 입력 완료';
+}
+
+function fillAllWithOriginal(){
+  document.querySelectorAll('.manual-pair').forEach(function(d){
+    var ta = d.querySelector('.manual-pair-tr');
+    var orig = d.querySelector('.manual-pair-orig');
+    if (ta && orig && !ta.value.trim()) {
+      ta.value = orig.textContent;
+      ta.dispatchEvent(new Event('input'));
+    }
+  });
+}
+
+function closeManualMode(){
+  document.getElementById('manual-overlay').classList.remove('active');
+  document.getElementById('manual-modal').classList.remove('active');
+}
+
+function applyManualTranslation(){
+  var state = _manualState;
+  if (!state) return;
+  var pairs = document.querySelectorAll('.manual-pair');
+  var translatedSubject = null;
+  var hasSubjectPair = !!state.subject;
+  // 번역값 수집
+  var translations = [];
+  pairs.forEach(function(d, idx){
+    var ta = d.querySelector('.manual-pair-tr');
+    var val = ta ? ta.value : '';
+    if (idx === 0 && hasSubjectPair) {
+      translatedSubject = val.trim();
+    } else {
+      translations.push(val);
+    }
+  });
+  // 빈 칸은 원문 유지
+  state.textNodes.forEach(function(n, i){
+    var tr = translations[i];
+    if (tr != null && tr.trim() !== '') {
+      var orig = n.nodeValue;
+      var leading = (orig.match(/^\s+/) || [''])[0];
+      var trailing = (orig.match(/\s+$/) || [''])[0];
+      n.nodeValue = leading + tr.trim() + trailing;
+    }
+    // 빈 값이면 원본 그대로 유지 (변경 안 함)
+  });
+  var resultHtml = state.root.innerHTML;
+  // body-tr textarea엔 평문 미리보기, 메모리엔 HTML
+  var preview = translations.filter(function(t){return t && t.trim();}).join('\n');
+  document.getElementById('body-tr').value = preview;
+  lastHtmlTranslation = resultHtml;
+  if (translatedSubject) {
+    document.getElementById('subject-translated').value = translatedSubject;
+  }
+  // 서식 모드 자동 ON — 회신 삽입 시 HTML을 쓰도록
+  document.getElementById('format-mode').checked = true;
+  closeManualMode();
+  _manualState = null;
+  showStatus('✓ 손번역 적용됨. "현재 회신에 삽입"을 누르면 서식 그대로 회신에 들어갑니다.', 'success');
 }
 
 function setDir(d, isManual){
@@ -920,84 +1025,6 @@ function showStatus(msg,type){
   if(type==='success') setTimeout(function(){el.classList.add('hidden');},4000);
 }
 
-function createReply(){
-  var subject=document.getElementById('subject').value.trim();
-  var subjectTr=document.getElementById('subject-translated').value.trim();
-  var bodyTrText=document.getElementById('body-tr').value.trim();
-  var bodyOrig=document.getElementById('body-orig').value.trim();
-  var isHtmlMode = document.getElementById('format-mode').checked;
-  // 서식 모드 + 보관된 HTML 번역이 있으면 그걸 사용
-  var useStoredHtml = isHtmlMode && lastHtmlTranslation && lastHtmlTranslation.trim().length > 0;
-  var bodyTr = useStoredHtml ? lastHtmlTranslation : bodyTrText;
-  // 번역문 없으면 원문만 삽입 (번역 없이 원문만 회신)
-  var origOnlyMode = !bodyTr;
-  var subjectLine=subjectTr||subject||'';
-  var isInterleave = document.getElementById('interleave-mode').checked;
-  var isPartial = clipboardOverride;
-  savePending({
-    subjectLine:subjectLine,
-    bodyTr: useStoredHtml ? bodyTr : stripTH(bodyTr),
-    bodyOrig:stripTH(bodyOrig),
-    isHtml: useStoredHtml,
-    isInterleave: isInterleave,
-    origOnly: origOnlyMode,
-    isPartial: isPartial
-  });
-  Office.context.mailbox.item.displayReplyAllForm({});
-  showStatus('✓ 회신창이 열렸어요. 패널을 다시 한 번만 열면 자동 삽입돼요.','success');
-}
-
-var _currentPending = null;
-function getPendingForBuild(){ return _currentPending; }
-
-function autoInsert(){
-  var pending=getPending();
-  if(!pending){show('banner-compose-empty');hide('pending-box');return;}
-  _currentPending = pending;
-  console.log('[TH] autoInsert pending.bodyOrig length:', (pending.bodyOrig||'').length);
-  console.log('[TH] autoInsert pending.bodyTr length:', (pending.bodyTr||'').length);
-  Office.context.mailbox.item.body.getAsync(Office.CoercionType.Html,function(rGet){
-    if(rGet.status!==Office.AsyncResultStatus.Succeeded){
-      document.getElementById('pending-desc').textContent='본문 가져오기 실패. 패널을 닫았다 다시 열어주세요.';
-      return;
-    }
-    var newHtml=buildHtml(rGet.value||'',pending.subjectLine,pending.bodyTr,pending.bodyOrig);
-    Office.context.mailbox.item.body.setAsync(newHtml,{coercionType:Office.CoercionType.Html},function(rSet){
-      if(rSet.status===Office.AsyncResultStatus.Succeeded){
-        // 원문 단어 수 계산 (사용자가 트래킹용으로 사용)
-        var origText = pending.bodyOrig || '';
-        console.log('[TH] Word count source length:', origText.length);
-        var tokens = origText.trim().split(/\s+/).filter(function(t){return t.length>0;});
-        var koCount = 0, enCount = 0;
-        tokens.forEach(function(tok){
-          if (/[\u3131-\u3163\uac00-\ud7a3]/.test(tok)) koCount++;
-          else if (/[a-zA-Z]/.test(tok)) enCount++;
-        });
-        var wcHtml = '';
-        if (koCount > 0 || enCount > 0) {
-          wcHtml = '<div style="margin-top:10px; padding:8px 12px; background:rgba(68,114,196,0.06); border:1px solid rgba(68,114,196,0.2); border-radius:6px; display:flex; gap:12px; align-items:center;">';
-          if (koCount > 0) {
-            wcHtml += '<div style="display:flex;flex-direction:column;gap:1px;"><span style="font-size:15px;font-weight:700;color:#4472C4;line-height:1;">' + koCount.toLocaleString() + '</span><span style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.04em;">한국어 단어</span></div>';
-          }
-          if (koCount > 0 && enCount > 0) {
-            wcHtml += '<div style="width:1px;height:24px;background:rgba(68,114,196,0.2);"></div>';
-          }
-          if (enCount > 0) {
-            wcHtml += '<div style="display:flex;flex-direction:column;gap:1px;"><span style="font-size:15px;font-weight:700;color:#4472C4;line-height:1;">' + enCount.toLocaleString() + '</span><span style="font-size:10px;color:#888;text-transform:uppercase;letter-spacing:0.04em;">영어 단어</span></div>';
-          }
-          wcHtml += '</div>';
-        }
-        clearPending();
-        _currentPending = null;
-        try { localStorage.removeItem('th_interleave'); } catch(e){}
-        document.getElementById('pending-desc').innerHTML='✅ 자동 삽입 완료! 회신창을 확인하고 보내세요.' + wcHtml;
-      } else {
-        document.getElementById('pending-desc').textContent='삽입 실패: '+(rSet.error&&rSet.error.message||'')+'. 다시 시도하려면 패널을 닫았다 여세요.';
-      }
-    });
-  });
-}
-
 function buildHtml(currentHtml,subjectLine,bodyTr,bodyOrig){
   var mg='font-family:\'Malgun Gothic\',\'맑은 고딕\',sans-serif;font-size:11pt;color:#4472C4;';
   var mgb='font-family:\'Malgun Gothic\',\'맑은 고딕\',sans-serif;font-size:11pt;color:#4472C4;font-weight:bold;';
@@ -1100,9 +1127,6 @@ function stripTH(text){
     .replace(/Translation has been added\.?/gi,'').replace(/\[번역문\s*\/\s*Translation\]/gi,'')
     .replace(/\[원문\s*\/\s*Original\]/gi,'').replace(/^---\s*$/gm,'').replace(/\n{3,}/g,'\n\n').trim();
 }
-function savePending(d){try{localStorage.setItem('th_pending',JSON.stringify(d));}catch(e){}}
-function getPending(){try{var d=localStorage.getItem('th_pending');return d?JSON.parse(d):null;}catch(e){return null;}}
-function clearPending(){try{localStorage.removeItem('th_pending');}catch(e){}}
 </script>
 </body>
 </html>
