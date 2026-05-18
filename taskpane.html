@@ -617,7 +617,14 @@ function runAI(){
       if(result.translatedSubject) document.getElementById('subject-translated').value=result.translatedSubject;
       document.getElementById('body-tr').value=result.translatedBody||'';
       if (payload.mode === 'html') {
-        showStatus('✓ 번역 완료 (서식 유지 모드). 회신 만들기를 누르세요.','success');
+        // 표 구조 보존 검증: 입력에 <td>가 있었는데 출력에 없으면 AI가 펴버린 것
+        var inTd = (payload.body.match(/<td[\s>]/gi) || []).length;
+        var outTd = ((result.translatedBody||'').match(/<td[\s>]/gi) || []).length;
+        if (inTd >= 2 && outTd < inTd * 0.7) {
+          showStatus('⚠ 서식 모드: AI가 표 구조를 일부 평탄화했습니다 ('+inTd+'개 셀 → '+outTd+'개). 한 번 더 번역하거나 다른 엔진을 시도해보세요.','error');
+        } else {
+          showStatus('✓ 번역 완료 (서식 유지 모드). 회신 만들기를 누르세요.','success');
+        }
       } else {
         showStatus('✓ 번역 완료. 회신 만들기를 누르세요.','success');
       }
@@ -672,14 +679,25 @@ function extractQuotedHtml(html){
 function trClaude(key,subject,body,srcLang,tgtLang,mode,modelId){
   var sysMsg;
   if (mode === 'html') {
-    sysMsg = 'Professional translator. The body is HTML with tags. Translate ONLY the visible text content from '+srcLang+' to '+tgtLang+'. PRESERVE all HTML tags, attributes, and structure EXACTLY. Do not modify or remove any tags (especially <table>, <tr>, <td>, <b>, <i>, <u>, <img>, <a>). Return ONLY JSON: {"translatedSubject":"...","translatedBody":"<html with translated text>"}';
+    sysMsg = 'You are a professional translator. The body is HTML markup. Translate ONLY the visible text from '+srcLang+' to '+tgtLang+'.\n\n' +
+      'CRITICAL RULES:\n' +
+      '1. PRESERVE every HTML tag, attribute, class, style, and structure EXACTLY as-is. Do NOT add, remove, merge, or restructure any tags.\n' +
+      '2. For tables: every <td>, <tr>, <th>, <tbody>, <thead> tag MUST appear in the output exactly once, in the same order. Translate only the text INSIDE each cell. NEVER merge multiple cells into one. NEVER flatten a table into a paragraph.\n' +
+      '3. One cell in = one cell out. If the input has 9 <td> tags, the output must have 9 <td> tags.\n' +
+      '4. Keep <br>, <p>, <div> exactly where they are.\n' +
+      '5. Translate text inside attributes only if it is visible (e.g. alt=, title=); leave href/src/class/style values untouched.\n\n' +
+      'Example:\n' +
+      'Input:  <table><tr><td>엄마야</td><td>누나야</td></tr></table>\n' +
+      'Output: <table><tr><td>Mother</td><td>Sister</td></tr></table>\n' +
+      '(NOT: <p>Mother Sister</p> — this would be WRONG.)\n\n' +
+      'Return ONLY a JSON object: {"translatedSubject":"...","translatedBody":"<full html with translated text>"}. The translatedBody value MUST be a valid HTML string with all original tags preserved.';
   } else {
     sysMsg = 'Professional translator. Translate from '+srcLang+' to '+tgtLang+'. Return ONLY JSON: {"translatedSubject":"...","translatedBody":"..."}';
   }
   return fetch('https://api.anthropic.com/v1/messages',{
     method:'POST',
     headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-    body:JSON.stringify({model:modelId||'claude-haiku-4-5-20251001',max_tokens:8000,
+    body:JSON.stringify({model:modelId||'claude-haiku-4-5-20251001',max_tokens:16000,
       system:sysMsg,
       messages:[{role:'user',content:'Subject: '+(subject||'(none)')+'\n\nBody:\n'+body}]})
   }).then(function(r){return r.text().then(function(t){
@@ -692,14 +710,25 @@ function trClaude(key,subject,body,srcLang,tgtLang,mode,modelId){
 function trOpenAI(key,subject,body,srcLang,tgtLang,mode){
   var sysMsg;
   if (mode === 'html') {
-    sysMsg = 'Professional translator. The body is HTML with tags. Translate ONLY the visible text content from '+srcLang+' to '+tgtLang+'. PRESERVE all HTML tags, attributes, and structure EXACTLY. Do not modify or remove any tags (especially <table>, <tr>, <td>, <b>, <i>, <u>, <img>, <a>). Return ONLY JSON: {"translatedSubject":"...","translatedBody":"<html with translated text>"}';
+    sysMsg = 'You are a professional translator. The body is HTML markup. Translate ONLY the visible text from '+srcLang+' to '+tgtLang+'.\n\n' +
+      'CRITICAL RULES:\n' +
+      '1. PRESERVE every HTML tag, attribute, class, style, and structure EXACTLY as-is. Do NOT add, remove, merge, or restructure any tags.\n' +
+      '2. For tables: every <td>, <tr>, <th>, <tbody>, <thead> tag MUST appear in the output exactly once, in the same order. Translate only the text INSIDE each cell. NEVER merge multiple cells into one. NEVER flatten a table into a paragraph.\n' +
+      '3. One cell in = one cell out. If the input has 9 <td> tags, the output must have 9 <td> tags.\n' +
+      '4. Keep <br>, <p>, <div> exactly where they are.\n' +
+      '5. Translate text inside attributes only if it is visible (e.g. alt=, title=); leave href/src/class/style values untouched.\n\n' +
+      'Example:\n' +
+      'Input:  <table><tr><td>엄마야</td><td>누나야</td></tr></table>\n' +
+      'Output: <table><tr><td>Mother</td><td>Sister</td></tr></table>\n' +
+      '(NOT: <p>Mother Sister</p> — this would be WRONG.)\n\n' +
+      'Return ONLY a JSON object: {"translatedSubject":"...","translatedBody":"<full html with translated text>"}. The translatedBody value MUST be a valid HTML string with all original tags preserved.';
   } else {
     sysMsg = 'Professional translator. Translate from '+srcLang+' to '+tgtLang+'. Return ONLY JSON: {"translatedSubject":"...","translatedBody":"..."}';
   }
   return fetch('https://api.openai.com/v1/chat/completions',{
     method:'POST',
     headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
-    body:JSON.stringify({model:'gpt-4o-mini',max_tokens:8000,
+    body:JSON.stringify({model:'gpt-4o-mini',max_tokens:16000,
       messages:[
         {role:'system',content:sysMsg},
         {role:'user',content:'Subject: '+(subject||'(none)')+'\n\nBody:\n'+body}
