@@ -471,12 +471,13 @@ function openManualMode(){
       showStatus('인용 영역을 찾지 못했어요. 콘솔의 [TH] 로그를 확인하고 보내주세요.', 'error');
       return;
     }
+    // 인용 영역에서 From/Sent/To/Subject 헤더 블록 제거 → 본문만 남김.
+    // (Outlook이 [원문/Original] 아래에 자동으로 헤더를 다시 붙임)
+    var bodyOnlyHtml = stripQuoteHeader(quotedHtml);
     // AI 자동 번역의 translateHtmlStructurally와 동일한 DOM 파싱.
     // 단, "번역" 단계가 없으므로 텍스트 노드를 그대로 두고 root.innerHTML만 다시 직렬화.
-    // → 결과는 quotedHtml과 의미적으로 동일하지만, DOM 파서가 한 번 거쳐가면서
-    //   AI 번역과 정확히 같은 마크업 정규화를 거침. (이게 핵심!)
     var parser = new DOMParser();
-    var docu = parser.parseFromString('<!DOCTYPE html><html><body>'+quotedHtml+'</body></html>', 'text/html');
+    var docu = parser.parseFromString('<!DOCTYPE html><html><body>'+bodyOnlyHtml+'</body></html>', 'text/html');
     var resultHtml = docu.body.innerHTML;
 
     // 이후는 AI 자동 번역 결과 처리와 완전히 동일
@@ -557,6 +558,8 @@ function runAI(){
         if (rH.status === Office.AsyncResultStatus.Succeeded) {
           var fullHtml = rH.value || '';
           var html = isComposeMode ? extractQuotedHtml(fullHtml) : extractLatestHtml(fullHtml);
+          // 회신창에서 시작한 경우 인용 헤더(From/Sent/To/Subject) 제거 — 본문만 번역 대상
+          if (isComposeMode) html = stripQuoteHeader(html);
           // 추출된 HTML에서 태그 제외한 텍스트가 너무 짧으면(=인용 영역을 못 찾았거나 빈 답장) text로 폴백
           var plainCheck = html.replace(/<[^>]+>/g,'').replace(/&nbsp;|\s/g,'').trim();
           if (plainCheck.length < 10) {
@@ -1051,24 +1054,41 @@ function buildHtml(currentHtml,subjectLine,bodyTr,bodyOrig){
     }
   }
   var html=currentHtml;
-  if(/<body[^>]*>/i.test(html)){html=html.replace(/(<body[^>]*>)/i,'$1'+topHeader);}
-  else{html=topHeader+html;}
-  var patterns=[
-    /(<b>제목[^:]*:?<\/b>[^<]*(?:<br\s*\/?>)?)/i,
-    /(<b>Subject[^:]*:?<\/b>[^<]*(?:<br\s*\/?>)?)/i,
-    /(<strong>제목[^:]*:?<\/strong>[^<]*(?:<br\s*\/?>)?)/i,
-    /(<strong>Subject[^:]*:?<\/strong>[^<]*(?:<br\s*\/?>)?)/i
-  ];
-  var inserted=false;
-  for(var i=0;i<patterns.length;i++){
-    if(patterns[i].test(html)){html=html.replace(patterns[i],'$1'+translationSection);inserted=true;break;}
-  }
-  if(!inserted){
-    var hrMatch=html.match(/<hr[^>]*>/i);
-    if(hrMatch){var idx=html.indexOf(hrMatch[0])+hrMatch[0].length;html=html.slice(0,idx)+translationSection+html.slice(idx);}
-    else{html=html.replace(/<\/body>/i,translationSection+'</body>');}
+  // 이전 삽입 흔적 제거 (Translation Helper가 이미 한 번 본문을 채운 경우 중복 누적 방지)
+  // 우리가 만든 콘텐츠는 [번역/Translated] 줄부터 [원문/Original] 라벨 직전까지 (또는 라벨 자체까지)
+  html = stripPriorInsertion(html);
+  // topHeader + translationSection을 본문 맨 위에 삽입.
+  // Outlook 자동 인용(상단 헤더 + 인용 본문)은 그 뒤로 자연스럽게 밀려 [원문/Original] 영역 역할을 함.
+  var ourContent = topHeader + translationSection;
+  if(/<body[^>]*>/i.test(html)){
+    html = html.replace(/(<body[^>]*>)/i, '$1' + ourContent);
+  } else {
+    html = ourContent + html;
   }
   return html;
+}
+
+// buildHtml이 이미 한 번 적용된 흔적을 제거 (회신 본문에 우리 라벨들이 박혀있으면 빼냄)
+// 패턴: [번역/Translated] 라벨로 시작해서 [원문/Original] 라벨까지 (또는 그 직후 '---' 구분선까지).
+function stripPriorInsertion(html){
+  if (!html) return html;
+  // [번역/Translated] ... [원문/Original] 사이의 모든 우리 콘텐츠 제거
+  // div / p 어디에 있어도 매칭되도록 라벨 텍스트 기준으로 잘라냄
+  // 1) [번역/Translated] 라벨이 들어있는 가장 위쪽 블록의 시작
+  var topLabelRe = /<(?:div|p)[^>]*>[^<]*\[번역\/Translated\]/i;
+  var topMatch = html.match(topLabelRe);
+  if (!topMatch) return html;
+  var startIdx = html.indexOf(topMatch[0]);
+  // 2) [원문 / Original] 라벨이 들어있는 블록의 끝 — 그 닫는 </div> 또는 </p>까지
+  var origLabelRe = /\[원문\s*\/\s*Original\][^<]*<\/(?:div|p)>/i;
+  var origMatch = html.substring(startIdx).match(origLabelRe);
+  if (!origMatch) return html;
+  var endIdx = startIdx + html.substring(startIdx).indexOf(origMatch[0]) + origMatch[0].length;
+  // [원문/Original] 라벨 직후의 빈 줄(&nbsp; div)들도 함께 제거
+  var rest = html.substring(endIdx);
+  var trailingEmpty = rest.match(/^(?:\s*<div[^>]*>(?:&nbsp;|\s)*<\/div>\s*)+/i);
+  if (trailingEmpty) endIdx += trailingEmpty[0].length;
+  return html.substring(0, startIdx) + html.substring(endIdx);
 }
 
 function esc(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');}
