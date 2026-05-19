@@ -574,6 +574,13 @@ function runAI(){
         if (rH.status === Office.AsyncResultStatus.Succeeded) {
           var fullHtml = rH.value || '';
           var html = isComposeMode ? extractQuotedHtml(fullHtml) : extractLatestHtml(fullHtml);
+          // 회신창에서는 인용 영역 맨 앞의 From/Sent/Subject 헤더 div를 제거하고 본문만 번역기로 보냄
+          if (isComposeMode) {
+            var beforeLen = html.length;
+            html = removeFirstHeaderDiv(html);
+            console.log('[TH] AI 서식 — 헤더 제거 전:', beforeLen, '/ 후:', html.length);
+            console.log('[TH] AI 서식 — 본문 시작 300자:', html.substring(0, 300));
+          }
           // 추출된 HTML에서 태그 제외한 텍스트가 너무 짧으면(=인용 영역을 못 찾았거나 빈 답장) text로 폴백
           var plainCheck = html.replace(/<[^>]+>/g,'').replace(/&nbsp;|\s/g,'').trim();
           if (plainCheck.length < 10) {
