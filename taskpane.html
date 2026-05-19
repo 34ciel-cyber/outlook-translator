@@ -459,6 +459,8 @@ function openManualMode(){
     }
     // 헤더 블록(From/Sent/To/Cc/Subject가 들어있는 첫 div) 제거 → 본문만 남김
     var bodyOnly = removeFirstHeaderDiv(quotedHtml);
+    console.log('[TH] 손번역 — quotedHtml 길이:', quotedHtml.length, '/ 헤더 제거 후:', bodyOnly.length);
+    console.log('[TH] 손번역 — bodyOnly 시작 300자:', bodyOnly.substring(0, 300));
     lastHtmlTranslation = bodyOnly;
     document.getElementById('body-tr').value = bodyOnly.replace(/<[^>]+>/g,'').replace(/&nbsp;/g,' ').replace(/\s+/g,' ').trim();
     document.getElementById('format-mode').checked = true;
