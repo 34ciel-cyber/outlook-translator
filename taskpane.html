@@ -460,13 +460,19 @@ function openManualMode(){
     var plainCheck = quotedHtml.replace(/<[^>]+>/g,'').replace(/&nbsp;|\s/g,'').trim();
     console.log('[TH] manual mode diagnostics:');
     console.log('  fullHtml length:', fullHtml.length);
-    console.log('  fullHtml first 500 chars:', fullHtml.substring(0, 500));
     console.log('  quotedHtml length:', quotedHtml.length);
     console.log('  plainCheck length:', plainCheck.length);
+    console.log('  pattern probes:');
+    console.log('    divRplyFwdMsg:', /<div[^>]*id=["\']?divRplyFwdMsg/i.test(fullHtml));
+    console.log('    border-top div:', /<div[^>]*style=["\'][^"\']*border-top:[^"\']*solid/i.test(fullHtml));
+    console.log('    "From:" header:', /(From|보낸\s*사람)\s*[:：]/i.test(fullHtml));
+    console.log('    "Sent:" header:', /(Sent|보낸\s*날짜)\s*[:：]/i.test(fullHtml));
     if (plainCheck.length < 10) {
       btn.disabled = false; btn.textContent = origLabel;
-      // 폴백: 패턴 매칭 실패 시, 사용자가 작성 중인 빈 답장 + 인용 영역 전체를 그대로 두고 안내만
-      showStatus('인용 원문 영역을 자동으로 찾지 못했어요. F12를 눌러 콘솔에서 [TH] 로그를 확인해주세요. 회신을 한 번 닫았다 [전체 회신]으로 다시 여는 것도 도움이 됩니다.', 'error');
+      // 마지막 폴백: fullHtml 자체를 그대로 쓰기 — 사용자가 작성 중인 빈 답장까지 포함되지만 적어도 동작은 함
+      console.log('[TH] all patterns failed. Using fullHtml as-is (includes user draft area).');
+      console.log('[TH] fullHtml sample (3000-5000):', fullHtml.substring(3000, 5000));
+      showStatus('인용 영역 자동 감지 실패. 콘솔의 [TH] 로그를 확인하고 보내주세요.', 'error');
       return;
     }
     // 회신 본문에 [번역문/Translation] 자리표시자 + 원문(서식 그대로) 박아넣기
@@ -637,22 +643,82 @@ function extractLatestHtml(html){
 // 회신창에서 인용된 원본 메일 부분만 추출 (extractLatestHtml의 반대)
 // 회신창 본문 = [사용자가 작성 중인 답장] + [인용 구분선/헤더] + [원본 메일]
 // 서식 모드에서는 [원본 메일] 부분을 번역해야 함
+//
+// Outlook 클라이언트마다 마크업이 천차만별이라 패턴을 여러 개 시도:
+// - Outlook for Web / new Outlook: id="divRplyFwdMsg", "Appendonsend" 등
+// - Gmail / 일부 메일 클라이언트: class="gmail_quote"
+// - Outlook 데스크톱 (Word 엔진): border-top 스타일 div + "From:"/"보낸 사람:" 헤더
+// - 폴백: 본문 안에서 "From:" 또는 "보낸 사람:" 텍스트가 단락 시작에 등장하는 첫 위치
 function extractQuotedHtml(html){
-  var patterns = [
+  if (!html) return '';
+  var result = '';
+  // 1차: 명시적 식별자 패턴 (가장 확실)
+  var idPatterns = [
+    /<div[^>]*id=["\']?divRplyFwdMsg/i,
+    /<div[^>]*id=["\']?Signature[^>]*>[\s\S]*?<div[^>]*id=["\']?divRplyFwdMsg/i,
+    /<div[^>]*id=["\']?appendonsend/i,
     /<div[^>]*class=["\']?gmail_quote/i,
     /<blockquote[^>]*type=["\']?cite["\']?/i,
-    /<div[^>]*id=["\']?divRplyFwdMsg/i,
-    /<hr[^>]*>\s*<b>(보낸 사람|From)/i,
     /<hr[^>]*id=["\']?stopSpelling/i
   ];
-  for (var i = 0; i < patterns.length; i++) {
-    var m = html.match(patterns[i]);
+  for (var i = 0; i < idPatterns.length; i++) {
+    var m = html.match(idPatterns[i]);
     if (m) {
       var idx = html.indexOf(m[0]);
-      return html.substring(idx); // 인용 영역 시작부터 끝까지
+      result = html.substring(idx);
+      break;
     }
   }
-  return ''; // 인용 영역 못 찾음 → 호출자가 text 모드로 폴백
+  // 2차: 시각적 구분선 패턴 (Word 엔진 Outlook)
+  if (!result) {
+    var stylePatterns = [
+      /<div[^>]*style=["\'][^"\']*border-top:[^"\']*solid/i,
+      /<div[^>]*style=["\'][^"\']*border:\s*none[^"\']*border-top:/i
+    ];
+    for (var i = 0; i < stylePatterns.length; i++) {
+      var m = html.match(stylePatterns[i]);
+      if (m) {
+        var idx = html.indexOf(m[0]);
+        var snippet = html.substring(idx, idx + 2000);
+        if (/(From|보낸\s*사람|발신)\s*[:：]/i.test(snippet)) {
+          result = html.substring(idx);
+          break;
+        }
+      }
+    }
+  }
+  // 3차: <hr> 뒤에 From/보낸 사람 헤더
+  if (!result) {
+    var hrMatch = html.match(/<hr[^>]*>[\s\S]{0,300}?<b[^>]*>\s*(From|보낸\s*사람|발신|Sent)\b/i);
+    if (hrMatch) result = html.substring(html.indexOf(hrMatch[0]));
+  }
+  // 4차 (폴백): 텍스트 검색
+  if (!result) {
+    var headerMatch = html.match(/<\/?\s*(?:b|strong|span)[^>]*>\s*(?:From|보낸\s*사람|발신|Sent)\s*<\/(?:b|strong|span)>\s*:/i);
+    if (!headerMatch) {
+      headerMatch = html.match(/(?:^|>)\s*(?:<[^>]+>\s*)*?(?:From|보낸\s*사람|발신)\s*(?:<\/[^>]+>\s*)*?:/i);
+    }
+    if (headerMatch) {
+      var idx = html.indexOf(headerMatch[0]);
+      var blockStart = Math.max(
+        html.lastIndexOf('<div', idx),
+        html.lastIndexOf('<p', idx),
+        html.lastIndexOf('<table', idx)
+      );
+      if (blockStart > 0 && idx - blockStart < 2000) {
+        result = html.substring(blockStart);
+      } else {
+        result = html.substring(idx);
+      }
+    }
+  }
+  if (!result) return '';
+  // 추출된 HTML에서 문서 구조 닫는 태그 제거 (회신 본문 재삽입 시 HTML 깨짐 방지)
+  result = result
+    .replace(/<\/body\s*>[\s\S]*$/i, '')  // </body> 이후 모두 제거
+    .replace(/<\/html\s*>[\s\S]*$/i, '')  // </html> 이후 모두 제거
+    .trim();
+  return result;
 }
 
 // 구조 보존 번역: HTML의 텍스트 노드만 추출해서 chunk 단위로 번역하고 원위치에 다시 채워넣음.
