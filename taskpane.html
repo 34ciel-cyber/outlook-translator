@@ -380,11 +380,6 @@ function insertDirectly(){
 
     var bodyTrForBuild = useStoredHtml ? bodyTr : stripTH(bodyTr);
     var newHtml = buildHtml(rGet.value || '', subjectLine, bodyTrForBuild, stripTH(bodyOrig));
-    console.log('[TH] insertDirectly — 회신 본문에 들어갈 최종 HTML:');
-    console.log('  useStoredHtml:', useStoredHtml);
-    console.log('  bodyTrForBuild 길이:', (bodyTrForBuild||'').length);
-    console.log('  bodyTrForBuild 앞 500자:', (bodyTrForBuild||'').substring(0, 500));
-    console.log('  newHtml 길이:', newHtml.length);
 
     Office.context.mailbox.item.body.setAsync(newHtml, {coercionType: Office.CoercionType.Html}, function(rSet){
       _currentPending = null;
@@ -462,15 +457,52 @@ function openManualMode(){
       showStatus('인용 원문을 찾지 못했어요.', 'error');
       return;
     }
-    // AI 번역 결과와 동일한 슬롯에 원문 HTML 그대로 저장
-    lastHtmlTranslation = quotedHtml;
-    console.log('[TH] 손번역 모드 — lastHtmlTranslation 저장:');
-    console.log('  길이:', quotedHtml.length);
-    console.log('  내용 전체:', quotedHtml);
-    document.getElementById('body-tr').value = quotedHtml.replace(/<[^>]+>/g,'').replace(/&nbsp;/g,' ').replace(/\s+/g,' ').trim();
+    // 헤더 블록(From/Sent/To/Cc/Subject가 들어있는 첫 div) 제거 → 본문만 남김
+    var bodyOnly = removeFirstHeaderDiv(quotedHtml);
+    lastHtmlTranslation = bodyOnly;
+    document.getElementById('body-tr').value = bodyOnly.replace(/<[^>]+>/g,'').replace(/&nbsp;/g,' ').replace(/\s+/g,' ').trim();
     document.getElementById('format-mode').checked = true;
     showStatus('✓ 원문이 준비됐어요. "현재 회신에 삽입"을 누르세요.', 'success');
   });
+}
+
+// 인용 영역 HTML의 첫 번째 헤더 div(From/Sent/To/Subject 포함)를 제거하고 본문만 반환.
+// Word 엔진 Outlook은 div 안에 div를 중첩하기도 해서, <div>의 여닫음 균형이 맞는 지점까지 자름.
+function removeFirstHeaderDiv(html){
+  if (!html) return html;
+  // 첫 글자가 <div로 시작하지 않으면 그대로 반환 (헤더 블록이 없음)
+  var trimmed = html.replace(/^\s+/, '');
+  if (!/^<div\b/i.test(trimmed)) return html;
+  // 첫 <div>의 시작
+  var startIdx = html.indexOf('<div');
+  // <div>와 </div>를 차례로 세면서 균형 맞는 위치 찾기
+  var depth = 0;
+  var i = startIdx;
+  var tagRe = /<\/?div\b[^>]*>/gi;
+  tagRe.lastIndex = startIdx;
+  var match;
+  var endIdx = -1;
+  while ((match = tagRe.exec(html)) !== null) {
+    if (match[0][1] === '/') {
+      depth--;
+      if (depth === 0) {
+        endIdx = match.index + match[0].length;
+        break;
+      }
+    } else {
+      depth++;
+    }
+  }
+  if (endIdx === -1) return html;
+  // 첫 div 블록이 헤더인지 확인 (From/Sent/Subject 키워드 포함 여부)
+  var firstBlock = html.substring(startIdx, endIdx);
+  if (!/(From|보낸\s*사람|Sent|보낸\s*날짜|Subject|제목)\s*[:：<]/i.test(firstBlock)) {
+    return html; // 헤더가 아니면 건드리지 않음
+  }
+  var rest = html.substring(endIdx).replace(/^\s+/, '');
+  // Word는 헤더 div 다음에 떠 있는 닫는 </div> 한두 개를 남기기도 함 — 청소
+  rest = rest.replace(/^(?:<\/div>\s*)+/i, '');
+  return rest;
 }
 
 function setDir(d, isManual){
@@ -573,9 +605,6 @@ function runAI(){
       if (payload.mode === 'html') {
         // 서식 모드 결과는 원본 HTML을 메모리에 보관 — textarea 우회용
         lastHtmlTranslation = result.translatedBody || '';
-        console.log('[TH] AI 번역 — lastHtmlTranslation 저장:');
-        console.log('  길이:', lastHtmlTranslation.length);
-        console.log('  내용 전체:', lastHtmlTranslation);
         // 표 구조 보존 검증
         var inTd = (payload.body.match(/<td[\s>]/gi) || []).length;
         var outTd = ((result.translatedBody||'').match(/<td[\s>]/gi) || []).length;
