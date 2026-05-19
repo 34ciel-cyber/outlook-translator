@@ -475,20 +475,24 @@ function openManualMode(){
       showStatus('인용 영역 자동 감지 실패. 콘솔의 [TH] 로그를 확인하고 보내주세요.', 'error');
       return;
     }
-    // 회신 본문에 [번역문/Translation] 자리표시자 + 원문(서식 그대로) 박아넣기
+    // From/Sent/To/Subject 헤더는 [번역문/Translation] 아래에 중복으로 들어가지 않도록 제거
+    // (아웃룩이 [원문/Original] 아래에 자동으로 인용 헤더를 다시 붙임)
+    var bodyOnlyHtml = stripQuoteHeader(quotedHtml);
+    console.log('  after stripQuoteHeader length:', bodyOnlyHtml.length);
+    // 회신 본문에 [번역문/Translation] 자리표시자 + 원문 본문(서식 그대로) 박아넣기
     var subjectLine = document.getElementById('subject-translated').value.trim()
                       || document.getElementById('subject').value.trim() || '';
     // _currentPending 임시 설정 — buildHtml이 isHtml: true로 동작하게
     _currentPending = {
       subjectLine: subjectLine,
-      bodyTr: quotedHtml,           // 번역문 자리에 원문 HTML 그대로 넣음 → 사용자가 그 위에 덮어쓰면 됨
+      bodyTr: bodyOnlyHtml,         // 헤더 제거된 본문 HTML → 사용자가 그 위에 덮어쓰면 됨
       bodyOrig: '',                  // 원문 별도 섹션은 빈 값 (아웃룩 자동 인용이 [원문/Original] 아래 자동으로 들어옴)
       isHtml: true,
       isInterleave: false,
       origOnly: false,
       isPartial: false
     };
-    var newHtml = buildHtml(fullHtml, subjectLine, quotedHtml, '');
+    var newHtml = buildHtml(fullHtml, subjectLine, bodyOnlyHtml, '');
     Office.context.mailbox.item.body.setAsync(newHtml, {coercionType: Office.CoercionType.Html}, function(rSet){
       _currentPending = null;
       btn.disabled = false; btn.textContent = origLabel;
@@ -637,6 +641,42 @@ function extractLatestHtml(html){
       if (idx > 100) return html.substring(0, idx);
     }
   }
+  return html;
+}
+
+// extractQuotedHtml이 반환한 인용 영역에서 From/Sent/To/Subject 헤더 블록을 제거하고 본문만 남김.
+// 인용 헤더는 보통 첫 번째 <div> 또는 <p> 블록 안에 From/Sent/To/Subject가 들어있고,
+// 그 다음 블록부터 진짜 본문임. 손번역 모드에서 [번역문/Translation] 라벨 바로 뒤에
+// 헤더가 또 나오면 중복이라 제거해야 함.
+function stripQuoteHeader(html){
+  if (!html) return html;
+  // 패턴 1: <div ...border-top...><p>From: ... Subject: ...</p></div> 블록을 통째로 제거
+  // (Word 엔진 Outlook의 전형적 마크업)
+  var headerBlock = html.match(/^<div[^>]*style=["\'][^"\']*border-top:[^>]*>[\s\S]*?<\/div>/i);
+  if (headerBlock && /(From|보낸\s*사람|발신|Sent)\s*[:：]/i.test(headerBlock[0])) {
+    return html.substring(headerBlock[0].length).replace(/^\s+/, '');
+  }
+  // 패턴 2: <div id="divRplyFwdMsg"...>...헤더...</div> 통째로 제거
+  var divHeader = html.match(/^<div[^>]*id=["\']?(?:divRplyFwdMsg|appendonsend)[^>]*>[\s\S]*?<\/div>/i);
+  if (divHeader) {
+    return html.substring(divHeader[0].length).replace(/^\s+/, '');
+  }
+  // 패턴 3: 시작이 <hr> + From 헤더로 된 단락이면, 그 단락이 끝날 때까지 제거
+  // <hr>...From:...Subject:...<br></p>  형태
+  var hrHeader = html.match(/^<hr[^>]*>[\s\S]*?<\/p\s*>/i);
+  if (hrHeader && /(From|보낸\s*사람|발신|Sent)\s*[:：]/i.test(hrHeader[0])) {
+    return html.substring(hrHeader[0].length).replace(/^\s+/, '');
+  }
+  // 패턴 4 (폴백): "Subject:" 까지가 헤더 — 그 다음 줄바꿈/태그부터 본문
+  // From, Sent, To, Cc, Subject 줄을 만나면 헤더로 간주하고, Subject 줄의 닫는 태그 다음부터 본문
+  var subjectEnd = html.match(/<b[^>]*>\s*(Subject|제목)\s*<\/b\s*>\s*[:：][^<]*<\/p\s*>/i);
+  if (subjectEnd) {
+    var endIdx = html.indexOf(subjectEnd[0]) + subjectEnd[0].length;
+    // 다음 블록 시작까지 공백/줄바꿈 건너뛰기
+    var rest = html.substring(endIdx).replace(/^\s+/, '');
+    if (rest.length > 20) return rest;
+  }
+  // 헤더 제거 실패 — 원본 그대로 반환 (적어도 작동은 함)
   return html;
 }
 
