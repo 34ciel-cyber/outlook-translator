@@ -380,6 +380,11 @@ function insertDirectly(){
 
     var bodyTrForBuild = useStoredHtml ? bodyTr : stripTH(bodyTr);
     var newHtml = buildHtml(rGet.value || '', subjectLine, bodyTrForBuild, stripTH(bodyOrig));
+    console.log('[TH] insertDirectly — 회신 본문에 들어갈 최종 HTML:');
+    console.log('  useStoredHtml:', useStoredHtml);
+    console.log('  bodyTrForBuild 길이:', (bodyTrForBuild||'').length);
+    console.log('  bodyTrForBuild 앞 500자:', (bodyTrForBuild||'').substring(0, 500));
+    console.log('  newHtml 길이:', newHtml.length);
 
     Office.context.mailbox.item.body.setAsync(newHtml, {coercionType: Office.CoercionType.Html}, function(rSet){
       _currentPending = null;
@@ -459,6 +464,9 @@ function openManualMode(){
     }
     // AI 번역 결과와 동일한 슬롯에 원문 HTML 그대로 저장
     lastHtmlTranslation = quotedHtml;
+    console.log('[TH] 손번역 모드 — lastHtmlTranslation 저장:');
+    console.log('  길이:', quotedHtml.length);
+    console.log('  내용 전체:', quotedHtml);
     document.getElementById('body-tr').value = quotedHtml.replace(/<[^>]+>/g,'').replace(/&nbsp;/g,' ').replace(/\s+/g,' ').trim();
     document.getElementById('format-mode').checked = true;
     showStatus('✓ 원문이 준비됐어요. "현재 회신에 삽입"을 누르세요.', 'success');
@@ -565,6 +573,9 @@ function runAI(){
       if (payload.mode === 'html') {
         // 서식 모드 결과는 원본 HTML을 메모리에 보관 — textarea 우회용
         lastHtmlTranslation = result.translatedBody || '';
+        console.log('[TH] AI 번역 — lastHtmlTranslation 저장:');
+        console.log('  길이:', lastHtmlTranslation.length);
+        console.log('  내용 전체:', lastHtmlTranslation);
         // 표 구조 보존 검증
         var inTd = (payload.body.match(/<td[\s>]/gi) || []).length;
         var outTd = ((result.translatedBody||'').match(/<td[\s>]/gi) || []).length;
