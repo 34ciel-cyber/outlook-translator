@@ -512,26 +512,54 @@ function removeFirstHeaderDiv(html){
 // 회신창 인용 영역에는 메일 스레드가 여러 개 누적됨.
 // removeFirstHeaderDiv로 첫 헤더만 제거하면 직전 송신자 본문 + 그 다음 메일들이 남으므로,
 // 다음 헤더 블록의 시작점을 찾아 그 직전까지만 잘라낸다 = 가장 최근 한 통의 본문만 남김.
+// 주의: 회신창의 *첫* 헤더만 border-top div로 감싸지고, 더 깊은 quote의 헤더는 평범한 <b>From:</b>로 남음.
 function keepUntilNextHeader(html){
   if (!html) return html;
-  var patterns = [
+  var positions = [];
+
+  // 1) 구조적 마커 (border-top div, divRplyFwdMsg, gmail_quote, blockquote 등)
+  var structural = [
     /<div[^>]*style=["\'][^"\']*border-top\s*:[^"\']*solid/i,
     /<div[^>]*id=["\']?divRplyFwdMsg/i,
     /<div[^>]*id=["\']?appendonsend/i,
     /<div[^>]*class=["\']?gmail_quote/i,
     /<blockquote[^>]*type=["\']?cite["\']?/i,
-    /<hr[^>]*id=["\']?stopSpelling/i,
-    /<hr[^>]*>\s*(?:<[^>]+>\s*)*\s*<b[^>]*>\s*(?:From|보낸\s*사람|발신|Sent)\s*<\/b>/i
+    /<hr[^>]*id=["\']?stopSpelling/i
   ];
-  var earliest = -1;
-  for (var i = 0; i < patterns.length; i++) {
-    var m = html.match(patterns[i]);
-    if (m) {
-      var idx = html.indexOf(m[0]);
-      if (earliest === -1 || idx < earliest) earliest = idx;
-    }
+  for (var i = 0; i < structural.length; i++) {
+    var m = html.match(structural[i]);
+    if (m) positions.push(html.indexOf(m[0]));
   }
-  if (earliest === -1) return html;
+
+  // 2) 평범한 볼드 헤더 키워드 (Word 체인 인용에서 가장 흔함)
+  //    <b>...<span>...From:</span></b> 같은 구조도 잡힘 (사이에 다른 인라인 태그 허용)
+  var boldHeader = /<b\b[^>]*>(?:\s*<[^>]+>\s*)*\s*(?:From|Sent|보낸\s*사람|보낸\s*날짜|발신|Subject)\s*[:：<]/i;
+  var bm = html.match(boldHeader);
+  if (bm) {
+    var bIdx = html.indexOf(bm[0]);
+    // 헤더가 들어 있는 블록(p/div)의 시작점을 찾아 그 앞부터 자름
+    var pIdx = html.lastIndexOf('<p', bIdx);
+    var dIdx = html.lastIndexOf('<div', bIdx);
+    var blockStart = Math.max(pIdx, dIdx);
+    positions.push(blockStart > 0 && bIdx - blockStart < 2000 ? blockStart : bIdx);
+  }
+
+  // 3) Word의 _MailOriginal 앵커 (백업)
+  var anchor = html.match(/<a\s+name=["\']?_MailOriginal/i);
+  if (anchor) {
+    var aIdx = html.indexOf(anchor[0]);
+    var pIdx2 = html.lastIndexOf('<p', aIdx);
+    var dIdx2 = html.lastIndexOf('<div', aIdx);
+    var blockStart2 = Math.max(pIdx2, dIdx2);
+    positions.push(blockStart2 > 0 && aIdx - blockStart2 < 2000 ? blockStart2 : aIdx);
+  }
+
+  // 0 이하(=매치 안 됨 또는 문서 맨 앞)는 무시
+  positions = positions.filter(function(p){return p > 0;});
+  if (positions.length === 0) return html;
+
+  var earliest = Math.min.apply(null, positions);
+  console.log('[TH] keepUntilNextHeader — 자른 위치:', earliest, '/ 원본 길이:', html.length);
   return html.substring(0, earliest);
 }
 
