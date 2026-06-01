@@ -1045,7 +1045,19 @@ function translateOneBatch(provider, key, batchChunks, srcLang, tgtLang, modelId
     '. Return ONLY a JSON array in this exact format: [{"id":0,"translation":"..."},{"id":1,"translation":"..."}]. ' +
     'Preserve the order. Include ALL ' + batchChunks.length + ' chunks in the response. Chunks:\n' +
     JSON.stringify(chunksJson);
-  var sysMsg = 'Professional translator. Translate accurately and naturally. Return ONLY valid JSON array, no markdown, no explanation.';
+  var sysMsg = 'Professional translator translating from ' + srcLang + ' to ' + tgtLang + '. ' +
+    'Translate accurately and naturally. Return ONLY a valid JSON array, no markdown, no explanation.\n\n' +
+    'LANGUAGE RULES (critical):\n' +
+    '- Each chunk is a fragment of a larger ' + srcLang + ' document, split by HTML structure.\n' +
+    '- If a chunk is ALREADY in ' + tgtLang + ' (e.g. brand names, technical terms, proper nouns, embedded English words in a Korean document, or vice versa), return it UNCHANGED. Do NOT back-translate.\n' +
+    '- If a chunk is a person name, company name, email address, URL, phone number, or numeric value, return it UNCHANGED regardless of language.\n' +
+    '- Translate only chunks actually written in ' + srcLang + '.\n\n' +
+    'JSON RULES (critical):\n' +
+    '(1) Inside translation values, escape every double quote as \\".\n' +
+    '(2) Escape backslashes as \\\\.\n' +
+    '(3) Replace literal newlines inside a translation value with \\n.\n' +
+    '(4) Do NOT wrap the array in markdown code fences.\n' +
+    '(5) Prefer Korean-style quotes (\u201C \u201D \u300C \u300D) over straight ASCII quotes in Korean output to avoid JSON escaping issues.';
 
   if (provider === 'claude') {
     return fetch('https://api.anthropic.com/v1/messages',{
@@ -1088,15 +1100,23 @@ function parseChunkedResult(raw, originalChunks, stopReason, bIdx, total){
     var translations = arr.map(function(item){return item.translation || '';});
     if (translations.length !== originalChunks.length) {
       console.warn('[TH]', batchLabel, '청크 수 불일치:', translations.length, 'vs', originalChunks.length);
-      // 부족분은 원문으로 채움 (사용자가 검수 가능)
       while (translations.length < originalChunks.length) {
         translations.push(originalChunks[translations.length]);
       }
     }
     return translations;
   } catch(e) {
-    // 2차 시도: 응답이 중간에 잘렸을 가능성 — 마지막 완전한 항목까지만 추출
-    console.warn('[TH]', batchLabel, '1차 파싱 실패:', e.message, '/ 부분 복구 시도');
+    var parseErr = e.message || '';
+    var posMatch = parseErr.match(/position\s+(\d+)/i);
+    var errPos = posMatch ? parseInt(posMatch[1], 10) : -1;
+    console.warn('[TH]', batchLabel, '1차 파싱 실패:', parseErr, '/ 위치:', errPos);
+    if (errPos > 0) {
+      var contextStart = Math.max(0, errPos - 60);
+      var contextEnd = Math.min(cleaned.length, errPos + 60);
+      console.warn('[TH] 깨진 자리 컨텍스트:', cleaned.substring(contextStart, contextEnd));
+    }
+
+    // 2차 시도: 응답이 잘렸을 가능성 — 마지막 완전한 항목까지 추출
     var lastValidIdx = cleaned.lastIndexOf('"}');
     if (lastValidIdx > 0) {
       var partial = cleaned.substring(0, lastValidIdx + 2) + ']';
@@ -1105,21 +1125,51 @@ function parseChunkedResult(raw, originalChunks, stopReason, bIdx, total){
         if (Array.isArray(arr2)) {
           arr2.sort(function(a,b){return (a.id||0) - (b.id||0);});
           var partialTr = arr2.map(function(item){return item.translation || '';});
-          console.warn('[TH]', batchLabel, '부분 복구 성공:', partialTr.length, '/', originalChunks.length);
-          // 빠진 항목은 원문으로 채움
+          console.warn('[TH]', batchLabel, '2차(잘림) 복구 성공:', partialTr.length, '/', originalChunks.length);
           while (partialTr.length < originalChunks.length) {
             partialTr.push(originalChunks[partialTr.length]);
           }
           return partialTr;
         }
-      } catch(e2) { /* fall through */ }
+      } catch(e2) { /* fall through to regex */ }
     }
-    // 완전 실패 — 응답 꼬리 200자 표시 (잘림 진단용)
+
+    // 3차 시도: 정규식으로 entry 하나하나 추출 (중간에 깨진 항목만 스킵)
+    var recovered = new Array(originalChunks.length);
+    var entryRe = /\{\s*"id"\s*:\s*(\d+)\s*,\s*"translation"\s*:\s*"((?:\\.|[^"\\])*)"\s*\}/g;
+    var m;
+    var foundCount = 0;
+    while ((m = entryRe.exec(cleaned)) !== null) {
+      var id = parseInt(m[1], 10);
+      if (id >= 0 && id < originalChunks.length) {
+        // \"  \\  \n 등 escape 복원
+        var tr = m[2]
+          .replace(/\\"/g, '"')
+          .replace(/\\\\/g, '\\')
+          .replace(/\\n/g, '\n')
+          .replace(/\\r/g, '\r')
+          .replace(/\\t/g, '\t')
+          .replace(/\\\//g, '/');
+        recovered[id] = tr;
+        foundCount++;
+      }
+    }
+    if (foundCount > 0) {
+      // 못 찾은 자리는 원문으로 채움
+      for (var i = 0; i < recovered.length; i++) {
+        if (recovered[i] == null) recovered[i] = originalChunks[i];
+      }
+      console.warn('[TH]', batchLabel, '3차(정규식) 복구:', foundCount, '/', originalChunks.length,
+        '(부족분', originalChunks.length - foundCount, '개는 원문 유지)');
+      return recovered;
+    }
+
+    // 완전 실패 — 응답 꼬리 200자 표시
     var tail = cleaned.length > 200 ? '...' + cleaned.substring(cleaned.length - 200) : cleaned;
     var reasonHint = (stopReason === 'max_tokens' || stopReason === 'length')
-      ? ' [응답 토큰 한도 초과 — 메일이 너무 김. 글자 수를 줄이거나 손번역 모드 사용]'
-      : '';
-    throw new Error('응답 파싱 실패' + (batchLabel ? ' (' + batchLabel + ')' : '') + reasonHint + '. 응답 꼬리: ' + tail);
+      ? ' [응답 토큰 한도 초과]'
+      : (errPos > 0 ? ' [JSON 깨짐 위치: ' + errPos + ']' : '');
+    throw new Error('응답 파싱 실패' + (batchLabel ? ' (' + batchLabel + ')' : '') + reasonHint + '. 꼬리: ' + tail);
   }
 }
 
