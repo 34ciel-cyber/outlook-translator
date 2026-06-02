@@ -533,14 +533,13 @@ function translateSelection(){
         console.log('[TH] 선택 영역 — 번역 후 HTML 끝 400자:', translatedHtml.substring(Math.max(0, translatedHtml.length - 400)));
 
         // 라벨 스타일: Outlook이 div보다 span/p 인라인 스타일을 더 잘 존중함.
-        // !important는 못 쓰니까(인라인 스타일에선 무시됨) <span style>로 텍스트만 감쌈.
-        var labelStyle = "font-family:'Malgun Gothic','맑은 고딕',sans-serif; font-size:11pt; color:#4472C4; font-weight:bold;";
+        var labelStyle = "font-family:'Malgun Gothic','맑은 고딕',sans-serif; font-size:11pt; color:#4472C4; font-weight:bold; mso-color-alt:#4472C4;";
         function label(text){
           return '<p style="margin:0; padding:0;"><span style="' + labelStyle + '">' + text + '</span></p>';
         }
         function spacer(){ return '<p style="margin:0; padding:0;">&nbsp;</p>'; }
 
-        var clipHtml =
+        var clipBodyHtml =
           label('[번역문 / Translation]') +
           spacer() +
           '<div>' + translatedHtml + '</div>' +
@@ -550,6 +549,12 @@ function translateSelection(){
           label('[원문 / Original]') +
           spacer();
 
+        // Outlook은 ClipboardItem이 *완전한 HTML 문서*일 때 인라인 색을 더 잘 존중함.
+        // text/html에는 풀 래퍼, 평문 폴백은 따로.
+        var clipHtml =
+          '<html><head><meta charset="utf-8"><meta http-equiv="Content-Type" content="text/html; charset=utf-8"></head>' +
+          '<body>' + clipBodyHtml + '</body></html>';
+
         // 평문 폴백
         var clipText =
           '[번역문 / Translation]\n\n' +
@@ -558,21 +563,61 @@ function translateSelection(){
 
         console.log('[TH] 선택 영역 — 클립보드 HTML 길이:', clipHtml.length);
 
-        copyToClipboard(clipHtml, clipText, function(ok, errMsg){
-          btn.disabled = false; btn.textContent = origLabel;
-          if (ok) {
-            showStatus('✅ 번역 완료, 클립보드에 복사됨. 원하는 위치에 Ctrl+V 하세요.', 'success');
-          } else {
-            // 폴백: textarea에 결과 표시해서 수동 복사 유도
-            document.getElementById('body-tr').value = clipText;
-            showStatus('번역은 됐는데 자동 복사가 안 됐어요(' + errMsg + '). 번역문 영역에서 직접 복사하세요.', 'error');
-          }
+        // 회신 본문 맨 위에 헤더(번역문이 추가되었습니다 + 제목)가 없으면 한 번만 추가
+        ensureReplyTopHeader(function(){
+          copyToClipboard(clipHtml, clipText, function(ok, errMsg){
+            btn.disabled = false; btn.textContent = origLabel;
+            if (ok) {
+              showStatus('✅ 번역 완료, 클립보드에 복사됨. 원하는 위치에 Ctrl+V 하세요.', 'success');
+            } else {
+              // 폴백: textarea에 결과 표시해서 수동 복사 유도
+              document.getElementById('body-tr').value = clipText;
+              showStatus('번역은 됐는데 자동 복사가 안 됐어요(' + errMsg + '). 번역문 영역에서 직접 복사하세요.', 'error');
+            }
+          });
         });
       })
       .catch(function(err){
         btn.disabled = false; btn.textContent = origLabel;
         showStatus('번역 오류: ' + (err.message || err), 'error');
       });
+  });
+}
+
+// 회신 본문 맨 위에 [번역/Translated] 제목 헤더가 없으면 prependAsync로 한 번만 추가.
+// 이미 있으면 아무것도 안 함 → 여러 번 선택 번역해도 헤더 중복 안 됨.
+function ensureReplyTopHeader(done){
+  Office.context.mailbox.item.body.getAsync(Office.CoercionType.Html, function(rH){
+    if (rH.status !== Office.AsyncResultStatus.Succeeded) { done(); return; }
+    var currentHtml = rH.value || '';
+    // 이미 헤더 있으면 스킵 (한 번만 박음)
+    if (/\[번역\/Translated\]|번역문이 추가되었습니다|Translation has been added/.test(currentHtml)) {
+      console.log('[TH] 회신 본문 헤더 이미 있음 — 스킵');
+      done();
+      return;
+    }
+    // 제목 가져와서 [번역/Translated] 라인 만들기
+    var subj = '';
+    try { subj = Office.context.mailbox.item.subject || ''; } catch(e) {}
+    // Re: 같은 접두어 정리
+    var cleanSubj = subj.replace(/^\s*(Re:|RE:|Fw:|FW:|Fwd:|FWD:|회신:|전달:)\s*/i, '').trim();
+    var mg = "font-family:'Malgun Gothic','맑은 고딕',sans-serif;font-size:11pt;color:#4472C4;";
+    var headerHtml =
+      '<div style="'+mg+'">[번역/Translated] ' + cleanSubj.replace(/[<>&]/g, function(c){
+        return c === '<' ? '&lt;' : c === '>' ? '&gt;' : '&amp;';
+      }) + '</div>' +
+      '<div>&nbsp;</div>' +
+      '<div style="'+mg+'">번역문이 추가되었습니다.</div>' +
+      '<div style="'+mg+'">Translation has been added.</div>' +
+      '<div>&nbsp;</div>';
+    Office.context.mailbox.item.body.prependAsync(headerHtml, {coercionType: Office.CoercionType.Html}, function(res){
+      if (res.status !== Office.AsyncResultStatus.Succeeded) {
+        console.warn('[TH] 헤더 prepend 실패:', res.error && res.error.message);
+      } else {
+        console.log('[TH] 회신 본문 맨 위 헤더 추가됨');
+      }
+      done();
+    });
   });
 }
 
@@ -1148,8 +1193,9 @@ function splitForInterleave(text){
 // 분할 번역 (서식 모드 + 교차 모드 공통)
 // 긴 메일은 한 번에 보내면 max_tokens에 막혀 응답이 잘림.
 // 따라서 chunk를 BATCH_SIZE 단위로 쪼개 여러 번 호출 후 결과 합침.
-var TRANSLATE_BATCH_SIZE = 80;   // 한 호출당 최대 텍스트 노드 수
-var TRANSLATE_MAX_TOKENS = 32000; // 호출당 응답 한도
+var TRANSLATE_BATCH_SIZE = 80;          // 한 호출당 최대 텍스트 노드 수
+var TRANSLATE_MAX_TOKENS_CLAUDE = 32000; // Claude 응답 한도
+var TRANSLATE_MAX_TOKENS_OPENAI = 16000; // gpt-4o-mini 응답 한도(16384가 상한)
 
 function translateChunked(provider, key, chunks, srcLang, tgtLang, modelId){
   // 배치로 분할
@@ -1197,7 +1243,7 @@ function translateOneBatch(provider, key, batchChunks, srcLang, tgtLang, modelId
     return fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
       headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:modelId||'claude-haiku-4-5-20251001',max_tokens:TRANSLATE_MAX_TOKENS,system:sysMsg,messages:[{role:'user',content:promptUser}]})
+      body:JSON.stringify({model:modelId||'claude-haiku-4-5-20251001',max_tokens:TRANSLATE_MAX_TOKENS_CLAUDE,system:sysMsg,messages:[{role:'user',content:promptUser}]})
     }).then(function(r){return r.text().then(function(t){
       if(!r.ok){var e=JSON.parse(t);throw new Error(e.error&&e.error.message||'HTTP '+r.status);}
       var data=JSON.parse(t);
@@ -1210,7 +1256,7 @@ function translateOneBatch(provider, key, batchChunks, srcLang, tgtLang, modelId
     return fetch('https://api.openai.com/v1/chat/completions',{
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
-      body:JSON.stringify({model:'gpt-4o-mini',max_tokens:TRANSLATE_MAX_TOKENS,messages:[{role:'system',content:sysMsg},{role:'user',content:promptUser}]})
+      body:JSON.stringify({model:'gpt-4o-mini',max_tokens:TRANSLATE_MAX_TOKENS_OPENAI,messages:[{role:'system',content:sysMsg},{role:'user',content:promptUser}]})
     }).then(function(r){return r.text().then(function(t){
       if(!r.ok){var e=JSON.parse(t);throw new Error(e.error&&e.error.message||'HTTP '+r.status);}
       var data=JSON.parse(t);
