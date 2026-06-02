@@ -1,0 +1,1409 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>번역 도우미</title>
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; font-size: 13px; background: #fff; color: #1f1f1f; padding: 12px; }
+    .format-tag { display: flex; align-items: center; gap: 5px; font-size: 11px; color: #4472C4; background: rgba(68,114,196,0.08); border: 0.5px solid #4472C4; border-radius: 20px; padding: 3px 9px; margin-bottom: 12px; width: fit-content; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: #4472C4; }
+    .banner { font-size: 11px; padding: 7px 10px; border-radius: 5px; margin-bottom: 12px; line-height: 1.6; }
+    .banner-read { border-left: 3px solid #4472C4; background: rgba(68,114,196,0.06); }
+    .banner-compose { border-left: 3px solid #107c10; background: rgba(16,124,16,0.06); }
+    .settings-toggle { font-size: 11px; color: #888; cursor: pointer; text-decoration: underline; margin-bottom: 10px; display: inline-block; }
+    .settings-panel { background: #f7f7f7; border: 1px solid #e0e0e0; border-radius: 6px; padding: 10px; margin-bottom: 12px; }
+    .settings-row { margin-bottom: 8px; }
+    .settings-row:last-child { margin-bottom: 0; }
+    .settings-label { font-size: 10px; font-weight: 600; color: #555; text-transform: uppercase; margin-bottom: 3px; }
+    .api-row { display: flex; gap: 6px; align-items: center; }
+    .api-row input { flex: 1; font-size: 11px; padding: 5px 8px; border: 1px solid #d0d0d0; border-radius: 5px; font-family: 'Segoe UI', sans-serif; }
+    .api-save-btn { font-size: 11px; font-weight: 600; padding: 5px 10px; border-radius: 5px; border: none; background: #4472C4; color: #fff; cursor: pointer; white-space: nowrap; }
+    .key-status { font-size: 10px; margin-top: 3px; }
+    .key-status.ok { color: #107c10; } .key-status.none { color: #aaa; }
+    .lbl { font-size: 11px; font-weight: 600; color: #555; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; display: flex; align-items: center; gap: 5px; }
+    .badge { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 10px; background: rgba(68,114,196,0.12); color: #4472C4; text-transform: none; letter-spacing: 0; }
+    .badge-ok { background: rgba(16,124,16,0.12); color: #107c10; }
+    .badge-auto { background: rgba(170,120,0,0.12); color: #aa7800; }
+    .field { margin-bottom: 10px; }
+    input[type=text], input[type=password], textarea, select { width: 100%; font-family: 'Segoe UI', sans-serif; font-size: 12px; border: 1px solid #d0d0d0; border-radius: 5px; padding: 6px 8px; line-height: 1.5; resize: vertical; color: #1f1f1f; }
+    textarea { min-height: 65px; }
+    .ai-row { display: flex; gap: 6px; margin-bottom: 4px; align-items: center; }
+    .ai-row select { flex: 1; height: 28px; padding: 0 6px; font-size: 11px; }
+    .ai-btn { font-size: 11px; font-weight: 600; padding: 5px 10px; border-radius: 5px; border: none; background: #1f1f1f; color: #fff; cursor: pointer; white-space: nowrap; }
+    .ai-btn:hover { opacity: 0.85; }
+    .ai-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-green { width: 100%; padding: 10px; font-size: 14px; font-weight: 600; cursor: pointer; border-radius: 6px; background: #107c10; color: #fff; border: none; transition: opacity 0.15s; }
+    .btn-green:hover { opacity: 0.88; }
+    .btn-green:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-small { font-size: 11px; font-weight: 600; padding: 5px 10px; border-radius: 5px; border: 1px solid #d0d0d0; background: #fff; color: #555; cursor: pointer; }
+    .status { font-size: 11px; color: #888; text-align: center; padding: 6px 0; word-break: break-word; }
+    .status.success { color: #107c10; }
+    .status.error { color: #c00; padding: 6px 8px; background: #fef0f0; border-radius: 4px; border: 1px solid #f5c0c0; text-align: left; }
+    .src-hint { font-size: 10px; color: #888; margin-bottom: 4px; line-height: 1.4; }
+    .reload-row { display: flex; justify-content: flex-end; margin-top: 4px; }
+    .pending-box { border: 1px solid #107c10; border-radius: 6px; padding: 10px 12px; background: rgba(16,124,16,0.05); margin-bottom: 12px; }
+    .pending-title { font-size: 12px; font-weight: 600; color: #107c10; margin-bottom: 4px; }
+    .pending-desc { font-size: 11px; color: #555; line-height: 1.5; }
+    .hidden { display: none !important; }
+    .header-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+    .lang-mini { display: flex; gap: 4px; align-items: center; }
+    .lang-btn { font-size: 10px; font-weight: 600; padding: 3px 8px; border-radius: 4px; cursor: pointer; border: 1px solid #d0d0d0; background: #fff; color: #666; }
+    .lang-btn.active { background: #1f1f1f; color: #fff; border-color: #1f1f1f; }
+    .auto-tag { font-size: 9px; color: #aa7800; margin-left: 4px; }
+    kbd { font-family: 'Segoe UI', sans-serif; font-size: 10px; padding: 1px 4px; border: 1px solid #ccc; border-radius: 3px; background: #f5f5f5; color: #555; }
+    .word-count-box { display: flex; gap: 12px; align-items: center; padding: 8px 12px; background: rgba(68,114,196,0.06); border: 1px solid rgba(68,114,196,0.2); border-radius: 6px; margin-bottom: 8px; }
+    .wc-item { display: flex; flex-direction: column; gap: 1px; }
+    .wc-num { font-size: 15px; font-weight: 700; color: #4472C4; line-height: 1; }
+    .wc-label { font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 0.04em; }
+    .wc-divider { width: 1px; height: 24px; background: rgba(68,114,196,0.2); }
+    .wc-empty { font-size: 11px; color: #aaa; font-style: italic; }
+    .img-warning { font-size: 10px; color: #aa7800; padding: 6px 8px; background: rgba(170,120,0,0.08); border-left: 2px solid #aa7800; border-radius: 3px; margin-top: 4px; margin-bottom: 4px; line-height: 1.5; }
+    .format-toggle { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #666; margin-top: 8px; cursor: pointer; user-select: none; }
+    .format-toggle input { cursor: pointer; }
+    .format-toggle .info { color: #888; font-size: 10px; margin-left: 4px; }
+  </style>
+</head>
+<body>
+<div class="format-tag"><span class="dot"></span>맑은 고딕 11pt · #4472C4</div>
+
+<div id="banner-read" class="banner banner-read hidden">
+  <b>⚠ 받은 메일 모드에서는 사용할 수 없어요.</b><br>
+  먼저 받은 메일에서 <b>전체 회신</b>(또는 회신)을 누른 뒤, <b>회신창에서 Translation Helper를 다시 열어주세요.</b>
+</div>
+<div id="banner-compose" class="banner banner-compose hidden">
+  <b>회신 작성 모드</b> — 인용된 원문이 자동으로 들어왔어요. 번역 후 <b>현재 회신에 삽입</b>을 누르면 바로 적용돼요.
+</div>
+
+<span class="settings-toggle" onclick="toggleSettings()">⚙ API 키 설정</span>
+<div class="settings-panel hidden" id="settings-panel">
+  <div class="settings-row">
+    <div class="settings-label">Claude (Anthropic) — sk-ant-...</div>
+    <div class="api-row">
+      <input type="password" id="key-claude" placeholder="sk-ant-..." />
+      <button class="api-save-btn" onclick="saveKey('claude')">저장</button>
+    </div>
+    <div class="key-status" id="status-claude"></div>
+  </div>
+  <div class="settings-row">
+    <div class="settings-label">ChatGPT (OpenAI) — sk-...</div>
+    <div class="api-row">
+      <input type="password" id="key-openai" placeholder="sk-..." />
+      <button class="api-save-btn" onclick="saveKey('openai')">저장</button>
+    </div>
+    <div class="key-status" id="status-openai"></div>
+  </div>
+</div>
+
+<div id="read-ui" class="hidden">
+  <div class="header-line">
+    <div class="lbl" style="margin:0;">번역 방향 <span class="auto-tag" id="auto-tag">(자동 감지)</span></div>
+    <div class="lang-mini">
+      <button class="lang-btn active" id="btn-ko-en" onclick="setDir('ko-en', true)">KO → EN</button>
+      <button class="lang-btn" id="btn-en-ko" onclick="setDir('en-ko', true)">EN → KO</button>
+    </div>
+  </div>
+
+  <div class="field">
+    <div class="lbl">메일 제목 <span class="badge">원문</span></div>
+    <input type="text" id="subject" placeholder="자동 입력됨" />
+  </div>
+
+  <div class="field">
+    <div class="lbl">번역된 제목 <span class="badge" id="subj-tr-badge">선택</span></div>
+    <input type="text" id="subject-translated" placeholder="비워두면 원문 제목 사용" />
+  </div>
+
+  <div class="field">
+    <div class="lbl">원문 본문 <span class="badge" id="src-badge">자동</span></div>
+    <div class="word-count-box" id="word-count-box"><span class="wc-empty" id="word-count">원문을 입력하면 단어 수가 표시됩니다</span></div>
+    <div class="src-hint">메일에서 텍스트 선택 시 그 부분, 안 하면 가장 최근 메일 본문이 들어와요.</div>
+    <textarea id="body-orig" placeholder="원문 본문" oninput="onOrigChange()"></textarea>
+    <div id="img-warning" class="img-warning hidden">⚠️ 이 메일에 이미지가 포함되어 있어요. 이미지는 자동 처리되지 않으니, 필요하면 텍스트만 선택해 복사한 뒤 [📋 클립보드에서 가져오기]를 눌러주세요.</div>
+    <div class="reload-row" style="gap:6px;">
+      <button class="btn-small" onclick="pasteFromClipboard()" style="background:#4472C4;color:#fff;border-color:#4472C4;">📋 클립보드에서 가져오기</button>
+    </div>
+    <label class="format-toggle">
+      <input type="checkbox" id="format-mode" />
+      <span>서식 유지 모드 (표·볼드·이탤릭 보존)</span>
+      <span class="info">— 베타, 토큰 비용 증가</span>
+    </label>
+    <label class="format-toggle">
+      <input type="checkbox" id="interleave-mode" />
+      <span>교차 삽입 모드 (원문↔번역문 번갈아 배치)</span>
+      <span class="info">— 긴 메일 검수에 유용</span>
+    </label>
+  </div>
+
+  <div class="field">
+    <div class="lbl">번역문 본문 <span class="badge">필수</span></div>
+    <div class="ai-row">
+      <select id="engine-select">
+        <option value="claude-haiku">Claude Haiku 4.5 (빠름·저렴)</option>
+        <option value="claude-sonnet">Claude Sonnet 4.6 (정확·고급)</option>
+        <option value="openai">ChatGPT</option>
+      </select>
+      <button class="ai-btn" id="ai-btn" onclick="runAI()">AI 자동 번역 ↗</button>
+      <button class="btn-small" id="manual-btn" onclick="openManualMode()" title="원문을 셀 단위로 보여드릴게요. 직접 번역만 채워넣으면 서식 그대로 유지됩니다.">✏️ 손번역 모드</button>
+      <button class="btn-small" id="selection-btn" onclick="translateSelection()" title="회신 본문에서 번역할 부분을 먼저 드래그한 다음 이 버튼을 누르세요. 번역 결과가 자동으로 클립보드에 복사됩니다.">🖱️ 선택 영역 번역</button>
+    </div>
+    <textarea id="body-tr" placeholder="번역문을 직접 입력하거나 위 버튼으로 AI 자동 번역 / 손번역"></textarea>
+  </div>
+
+  <div id="status-msg" class="status hidden"></div>
+  <button class="btn-green" id="create-btn" onclick="insertDirectly()">📧 현재 회신에 삽입</button>
+</div>
+
+<div id="compose-status" class="status hidden"></div>
+
+<script>
+var direction='ko-en', isComposeMode=false, dirManuallySet=false, clipboardOverride=false;
+// 서식 모드 번역 결과의 원본 HTML을 textarea 우회해서 보관 (textarea는 display용)
+var lastHtmlTranslation = null;
+function show(id){document.getElementById(id).classList.remove('hidden');}
+function hide(id){document.getElementById(id).classList.add('hidden');}
+
+var KEY_MAP={claude:'anthropic_api_key', openai:'openai_api_key'};
+// 드롭다운 값 → Anthropic 모델 ID 매핑
+var MODEL_IDS={'claude-haiku':'claude-haiku-4-5-20251001','claude-sonnet':'claude-sonnet-4-6'};
+// 드롭다운 값 → API 프로바이더 (키 조회 + 분기용)
+function engineProvider(eng){ return (eng && eng.indexOf('claude') === 0) ? 'claude' : 'openai'; }
+function loadAllKeys(){
+  ['claude','openai'].forEach(function(eng){
+    var k=localStorage.getItem(KEY_MAP[eng])||'';
+    var el=document.getElementById('status-'+eng);
+    if(el){
+      if(k){document.getElementById('key-'+eng).value=k;el.textContent='✓ 키 저장됨';el.className='key-status ok';}
+      else{el.textContent='키 없음';el.className='key-status none';}
+    }
+  });
+}
+function saveKey(eng){
+  var k=document.getElementById('key-'+eng).value.trim();
+  var el=document.getElementById('status-'+eng);
+  try{
+    if(k){localStorage.setItem(KEY_MAP[eng],k);el.textContent='✓ 저장됐습니다';el.className='key-status ok';}
+    else{localStorage.removeItem(KEY_MAP[eng]);el.textContent='삭제됐습니다';el.className='key-status none';}
+  }catch(e){el.textContent='저장 실패';el.className='key-status none';}
+}
+function toggleSettings(){document.getElementById('settings-panel').classList.toggle('hidden');}
+
+// ── 언어 자동 감지 ──────────────────────────────────────
+function detectLanguage(text){
+  if(!text || !text.trim()) return null;
+  // 한글 문자 비율로 판단
+  var koreanChars = (text.match(/[\u3131-\u3163\uac00-\ud7a3]/g) || []).length;
+  var totalChars = text.replace(/\s/g, '').length;
+  if (totalChars === 0) return null;
+  var koreanRatio = koreanChars / totalChars;
+  return koreanRatio > 0.3 ? 'ko' : 'en';
+}
+
+function autoDetectAndSetDir(text){
+  if (dirManuallySet) return; // 수동 설정 후엔 자동 감지 안 함
+  var lang = detectLanguage(text);
+  if (!lang) return;
+  if (lang === 'ko') setDir('ko-en', false);
+  else setDir('en-ko', false);
+}
+
+function onOrigChange(){
+  var text = document.getElementById('body-orig').value;
+  autoDetectAndSetDir(text);
+  updateWordCount(text);
+}
+
+function updateWordCount(text){
+  var box = document.getElementById('word-count-box');
+  if (!box) return;
+  if (!text || !text.trim()){
+    box.innerHTML = '<span class="wc-empty">원문을 입력하면 단어 수가 표시됩니다</span>';
+    return;
+  }
+  var tokens = text.trim().split(/\s+/);
+  var koCount = 0, enCount = 0;
+  tokens.forEach(function(tok){
+    if (/[\u3131-\u3163\uac00-\ud7a3]/.test(tok)) koCount++;
+    else if (/[a-zA-Z]/.test(tok)) enCount++;
+  });
+  var html = '';
+  if (koCount > 0) {
+    html += '<div class="wc-item"><span class="wc-num">' + koCount.toLocaleString() + '</span><span class="wc-label">한국어 단어</span></div>';
+  }
+  if (koCount > 0 && enCount > 0) html += '<div class="wc-divider"></div>';
+  if (enCount > 0) {
+    html += '<div class="wc-item"><span class="wc-num">' + enCount.toLocaleString() + '</span><span class="wc-label">영어 단어</span></div>';
+  }
+  if (!html) {
+    html = '<span class="wc-empty">단어 없음</span>';
+  }
+  box.innerHTML = html;
+}
+
+Office.onReady(function(info){
+  loadAllKeys();
+  if(info.host!==Office.HostType.Outlook) return;
+  var item=Office.context.mailbox.item;
+  isComposeMode=typeof item.subject!=='string';
+  if(!isComposeMode){
+    // 읽기 모드 — UI 차단, 안내만 표시
+    show('banner-read');
+    return;
+  }
+  // 회신창 — 메인 워크플로우
+  show('banner-compose');
+  show('read-ui');
+  // 제목 가져오기
+  item.subject.getAsync(function(r){
+    if(r.status===Office.AsyncResultStatus.Succeeded){
+      var subj = (r.value||'').replace(/^(RE:\s*|\[EXT\]\s*|Fw:\s*)+/gi,'').trim();
+      document.getElementById('subject').value = subj;
+    }
+  });
+  // 회신 본문에서 인용된 원문 추출
+  extractBodyFromCompose();
+  // 엔진 기본값
+  var engineSelect=document.getElementById('engine-select');
+  if(localStorage.getItem(KEY_MAP.claude)) engineSelect.value='claude-haiku';
+  else if(localStorage.getItem(KEY_MAP.openai)) engineSelect.value='openai';
+  // 키보드 단축키
+  document.addEventListener('keydown', function(e){
+    if(e.ctrlKey && e.key === 'Enter'){
+      if(e.shiftKey){
+        e.preventDefault();
+        insertDirectly();
+      } else {
+        e.preventDefault();
+        runAI();
+      }
+    }
+  });
+});
+
+function setSrcBadge(label,ok){
+  var el=document.getElementById('src-badge');
+  if(el){el.textContent=label;el.className=ok?'badge badge-ok':'badge';}
+}
+function extractBodyFromCompose(){
+  console.log('[TH] extractBodyFromCompose called');
+  Office.context.mailbox.item.body.getAsync(Office.CoercionType.Text, function(r){
+    if(r.status !== Office.AsyncResultStatus.Succeeded){
+      console.log('[TH] compose body fetch failed');
+      return;
+    }
+    var fullText = r.value || '';
+    console.log('[TH] compose body length:', fullText.length);
+    // 인용된 원문 추출 (From:/보낸 사람: 이후 메일 헤더 건너뛰고 본문만)
+    var text = extractQuotedBody(fullText);
+    if (text) {
+      var ta = document.getElementById('body-orig');
+      ta.value = text;
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+      setSrcBadge('인용 원문', true);
+      autoDetectAndSetDir(text);
+      updateWordCount(text);
+    }
+  });
+}
+
+function extractQuotedBody(fullText){
+  var lines = fullText.split('\n');
+  var headerStart = -1;
+  // From: 또는 보낸 사람: 찾기
+  for(var i = 0; i < lines.length; i++){
+    if(/^(From|보낸 사람|보낸사람)\s*:/i.test(lines[i].trim())){
+      headerStart = i;
+      break;
+    }
+  }
+  if(headerStart === -1) return '';
+  // 헤더 블록 건너뛰기 (From, Sent, To, Cc, Subject 등)
+  var bodyStart = headerStart;
+  for(var i = headerStart; i < lines.length; i++){
+    var t = lines[i].trim();
+    if(t !== '' &&
+       !/^(From|Sent|To|Cc|Bcc|Subject|보낸 사람|보낸사람|보낸 날짜|보낸날짜|받는 사람|받는사람|참조|숨은 참조|제목)\s*:/i.test(t)){
+      bodyStart = i;
+      break;
+    }
+  }
+  // 다음 인용 메일 시작점 찾기 (두 번째 From:)
+  var bodyEnd = lines.length;
+  for(var i = bodyStart + 1; i < lines.length; i++){
+    if(/^(From|보낸 사람|보낸사람)\s*:/i.test(lines[i].trim())){
+      bodyEnd = i;
+      break;
+    }
+  }
+  return lines.slice(bodyStart, bodyEnd)
+    .filter(function(l){return !l.match(/번역\s*부탁드립니다|Please\s*translate/i);})
+    .join('\n').trim();
+}
+
+// buildHtml이 참조하는 임시 상태 (insertDirectly 안에서만 set)
+var _currentPending = null;
+function getPendingForBuild(){ return _currentPending; }
+
+// 회신창에 직접 삽입
+function insertDirectly(){
+  var subject = document.getElementById('subject').value.trim();
+  var subjectTr = document.getElementById('subject-translated').value.trim();
+  var bodyTrText = document.getElementById('body-tr').value.trim();
+  var bodyOrig = document.getElementById('body-orig').value.trim();
+  var isHtmlMode = document.getElementById('format-mode').checked;
+  var isInterleave = document.getElementById('interleave-mode').checked;
+  // 서식 모드 + 메모리에 보관된 HTML 번역이 있으면 그걸 사용 (textarea 우회).
+  // 사용자가 textarea에서 수정한 경우는 평문이므로 isHtmlMode 효력 상실.
+  var useStoredHtml = isHtmlMode && lastHtmlTranslation && lastHtmlTranslation.trim().length > 0;
+  var bodyTr = useStoredHtml ? lastHtmlTranslation : bodyTrText;
+  var origOnlyMode = !bodyTr;
+  var subjectLine = subjectTr || subject || '';
+
+  showStatus('삽입 중...');
+
+  Office.context.mailbox.item.body.getAsync(Office.CoercionType.Html, function(rGet){
+    if(rGet.status !== Office.AsyncResultStatus.Succeeded){
+      showStatus('본문 가져오기 실패', 'error');
+      return;
+    }
+    // pending 데이터 임시 설정. HTML 번역물은 stripTH 통과시키면 안 됨 (정규식이 안전하지만 우회).
+    _currentPending = {
+      subjectLine: subjectLine,
+      bodyTr: useStoredHtml ? bodyTr : stripTH(bodyTr),
+      bodyOrig: stripTH(bodyOrig),
+      isHtml: useStoredHtml,
+      isInterleave: isInterleave,
+      origOnly: origOnlyMode,
+      isPartial: clipboardOverride
+    };
+
+    var bodyTrForBuild = useStoredHtml ? bodyTr : stripTH(bodyTr);
+    var newHtml = buildHtml(rGet.value || '', subjectLine, bodyTrForBuild, stripTH(bodyOrig));
+
+    Office.context.mailbox.item.body.setAsync(newHtml, {coercionType: Office.CoercionType.Html}, function(rSet){
+      _currentPending = null;
+      if(rSet.status === Office.AsyncResultStatus.Succeeded){
+        // 단어수 계산
+        var origText = bodyOrig;
+        var tokens = origText.trim().split(/\s+/).filter(function(t){return t.length>0;});
+        var koCount = 0, enCount = 0;
+        tokens.forEach(function(tok){
+          if(/[\u3131-\u3163\uac00-\ud7a3]/.test(tok)) koCount++;
+          else if(/[a-zA-Z]/.test(tok)) enCount++;
+        });
+        var wcMsg = '';
+        if(koCount > 0) wcMsg += '한국어: ' + koCount + '단어';
+        if(koCount > 0 && enCount > 0) wcMsg += ' · ';
+        if(enCount > 0) wcMsg += '영어: ' + enCount + '단어';
+        showStatus('✓ 삽입 완료! ' + (wcMsg ? '(' + wcMsg + ')' : ''), 'success');
+        try { localStorage.removeItem('th_interleave'); } catch(e){}
+      } else {
+        showStatus('삽입 실패: ' + (rSet.error && rSet.error.message || ''), 'error');
+      }
+    });
+  });
+}
+
+function pasteFromClipboard(){
+  console.log('[TH] pasteFromClipboard called');
+  try {
+    if (!navigator.clipboard || !navigator.clipboard.readText) {
+      console.log('[TH] clipboard API not available');
+      showStatus('클립보드 API 지원 안 됨. 원문 칸을 클릭 후 Ctrl+V로 직접 붙여넣어 주세요.', 'error');
+      return;
+    }
+    navigator.clipboard.readText().then(function(text){
+      console.log('[TH] clipboard text length:', (text||'').length);
+      if (!text || !text.trim()) {
+        showStatus('클립보드가 비어있어요. 먼저 메일에서 텍스트를 Ctrl+C로 복사해주세요.', 'error');
+        return;
+      }
+      clipboardOverride = true;
+      var ta = document.getElementById('body-orig');
+      ta.value = text.trim();
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+      setSrcBadge('클립보드', true);
+      autoDetectAndSetDir(text);
+      updateWordCount(text);
+      document.getElementById('img-warning').classList.add('hidden');
+      showStatus('✓ 클립보드에서 ' + text.trim().length + '자 가져옴', 'success');
+    }).catch(function(e){
+      console.log('[TH] clipboard readText error:', e.message);
+      showStatus('클립보드 접근 실패: ' + e.message + '. 원문 칸을 클릭 후 Ctrl+V로 직접 붙여넣어 주세요.', 'error');
+    });
+  } catch(e) {
+    console.log('[TH] clipboard catch error:', e.message);
+    showStatus('클립보드 접근 실패. 원문 칸을 클릭 후 Ctrl+V로 직접 붙여넣어 주세요.', 'error');
+  }
+}
+
+// ─── 손번역 모드 ─────────────────────────────────────────────
+// AI 자동 번역의 결과 자리에 "원문 HTML 그대로"를 넣을 뿐. 그 외 모든 처리는 AI와 동일.
+function openManualMode(){
+  var btn = document.getElementById('manual-btn');
+  btn.disabled = true;
+  var origLabel = btn.textContent;
+  btn.textContent = '준비 중...';
+
+  Office.context.mailbox.item.body.getAsync(Office.CoercionType.Html, function(rH){
+    btn.disabled = false; btn.textContent = origLabel;
+    if (rH.status !== Office.AsyncResultStatus.Succeeded) {
+      showStatus('회신 본문을 가져오지 못했어요.', 'error');
+      return;
+    }
+    var quotedHtml = extractQuotedHtml(rH.value || '');
+    if (!quotedHtml || quotedHtml.replace(/<[^>]+>/g,'').trim().length < 10) {
+      showStatus('인용 원문을 찾지 못했어요.', 'error');
+      return;
+    }
+    // 헤더 블록(From/Sent/To/Cc/Subject가 들어있는 첫 div) 제거 → 본문 + 그 아래 메일들
+    var bodyOnly = removeFirstHeaderDiv(quotedHtml);
+    // 다음 메일 헤더가 또 나오면 거기서 끊음 → 가장 최근 한 통의 본문만 남김
+    bodyOnly = keepUntilNextHeader(bodyOnly);
+    console.log('[TH] 손번역 — 인용 전체:', quotedHtml.length, '/ 첫 메일만:', bodyOnly.length);
+    console.log('[TH] 손번역 — bodyOnly 시작 300자:', bodyOnly.substring(0, 300));
+    lastHtmlTranslation = bodyOnly;
+    document.getElementById('body-tr').value = bodyOnly.replace(/<[^>]+>/g,'').replace(/&nbsp;/g,' ').replace(/\s+/g,' ').trim();
+    document.getElementById('format-mode').checked = true;
+    showStatus('✓ 원문이 준비됐어요. "현재 회신에 삽입"을 누르세요.', 'success');
+  });
+}
+
+// 선택 영역 번역: 회신 본문에서 사용자가 드래그한 부분을 HTML로 가져와 번역.
+// 결과는 textarea/회신본문에 자동 삽입하지 않고 클립보드로만 복사 (사용자가 원하는 위치에 Ctrl+V).
+function translateSelection(){
+  var btn = document.getElementById('selection-btn');
+  if (btn.disabled) return;
+  btn.disabled = true;
+  var origLabel = btn.textContent;
+  btn.textContent = '⏳ 선택 영역 가져오는 중...';
+
+  Office.context.mailbox.item.getSelectedDataAsync(Office.CoercionType.Html, function(res){
+    if (res.status !== Office.AsyncResultStatus.Succeeded) {
+      btn.disabled = false; btn.textContent = origLabel;
+      showStatus('선택 영역을 가져오지 못했어요. 먼저 본문에서 번역할 부분을 드래그하세요.', 'error');
+      return;
+    }
+    var selHtml = (res.value && res.value.data) || '';
+    var plainCheck = selHtml.replace(/<[^>]+>/g,'').replace(/&nbsp;|\s/g,'').trim();
+    if (plainCheck.length < 2) {
+      btn.disabled = false; btn.textContent = origLabel;
+      showStatus('선택된 텍스트가 없어요. 본문에서 번역할 부분을 드래그한 뒤 다시 누르세요.', 'error');
+      return;
+    }
+    console.log('[TH] 선택 영역 — HTML 길이:', selHtml.length, '/ 텍스트 길이:', plainCheck.length);
+
+    // 방향 자동 감지 (전체 자동감지 안 됐을 경우 대비)
+    var dir = direction;
+    if (!dirManuallySet) {
+      var koCount = (plainCheck.match(/[가-힣]/g) || []).length;
+      var enCount = (plainCheck.match(/[a-zA-Z]/g) || []).length;
+      dir = (koCount > enCount) ? 'ko-en' : 'en-ko';
+      console.log('[TH] 선택 영역 — 자동 방향:', dir, '(한:'+koCount+', 영:'+enCount+')');
+    }
+    var srcLang = dir === 'ko-en' ? 'Korean' : 'English';
+    var tgtLang = dir === 'ko-en' ? 'English' : 'Korean';
+
+    btn.textContent = '⏳ AI 번역 중...';
+
+    // 모델/키 가져오기
+    var modelSel = document.getElementById('ai-model');
+    var modelVal = modelSel ? modelSel.value : 'claude-haiku';
+    var provider, key, modelId;
+    if (modelVal === 'openai') {
+      provider = 'openai';
+      key = localStorage.getItem('th_openai_key') || '';
+      if (!key) { btn.disabled = false; btn.textContent = origLabel; showStatus('ChatGPT API 키가 없어요. ⚙ 설정에서 입력하세요.','error'); return; }
+    } else {
+      provider = 'claude';
+      key = localStorage.getItem('th_claude_key') || '';
+      if (!key) { btn.disabled = false; btn.textContent = origLabel; showStatus('Claude API 키가 없어요. ⚙ 설정에서 입력하세요.','error'); return; }
+      modelId = (modelVal === 'claude-sonnet') ? 'claude-sonnet-4-6' : 'claude-haiku-4-5-20251001';
+    }
+
+    // 구조 보존 번역
+    translateHtmlStructurally(selHtml, provider, key, srcLang, tgtLang, modelId)
+      .then(function(result){
+        var translatedHtml = (result && result.translatedBody) || '';
+        // 클립보드용 HTML 조립 (사용자 요구 형식)
+        var mgb = "font-family:'Malgun Gothic','맑은 고딕',sans-serif;font-size:11pt;color:#4472C4;font-weight:bold;";
+        var plain = "font-family:'Malgun Gothic','맑은 고딕',sans-serif;font-size:11pt;";
+        var clipHtml =
+          '<div style="'+mgb+'">[번역문 / Translation]</div>' +
+          '<div>&nbsp;</div>' +
+          '<div style="'+plain+'">' + translatedHtml + '</div>' +
+          '<div>&nbsp;</div>' +
+          '<div>---</div>' +
+          '<div>&nbsp;</div>' +
+          '<div style="'+mgb+'">[원문 / Original]</div>' +
+          '<div>&nbsp;</div>';
+
+        // 평문 폴백 (HTML 못 받는 곳용)
+        var clipText =
+          '[번역문 / Translation]\n\n' +
+          translatedHtml.replace(/<[^>]+>/g,'').replace(/&nbsp;/g,' ').replace(/\s+\n/g,'\n').trim() +
+          '\n\n---\n\n[원문 / Original]\n';
+
+        copyToClipboard(clipHtml, clipText, function(ok, errMsg){
+          btn.disabled = false; btn.textContent = origLabel;
+          if (ok) {
+            showStatus('✅ 번역 완료, 클립보드에 복사됨. 원하는 위치에 Ctrl+V 하세요.', 'success');
+          } else {
+            // 폴백: textarea에 결과 표시해서 수동 복사 유도
+            document.getElementById('body-tr').value = clipText;
+            showStatus('번역은 됐는데 자동 복사가 안 됐어요(' + errMsg + '). 번역문 영역에서 직접 복사하세요.', 'error');
+          }
+        });
+      })
+      .catch(function(err){
+        btn.disabled = false; btn.textContent = origLabel;
+        showStatus('번역 오류: ' + (err.message || err), 'error');
+      });
+  });
+}
+
+// HTML + 평문 둘 다 클립보드에 담기 (가능하면). 비동기.
+function copyToClipboard(htmlStr, textStr, done){
+  try {
+    if (window.ClipboardItem && navigator.clipboard && navigator.clipboard.write) {
+      var item = new ClipboardItem({
+        'text/html': new Blob([htmlStr], {type:'text/html'}),
+        'text/plain': new Blob([textStr], {type:'text/plain'})
+      });
+      navigator.clipboard.write([item])
+        .then(function(){ done(true); })
+        .catch(function(e){
+          // HTML 복사 실패 → 평문이라도 시도
+          navigator.clipboard.writeText(textStr)
+            .then(function(){ done(true); })
+            .catch(function(e2){ done(false, e2.message || 'clipboard.write 거부'); });
+        });
+    } else if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(textStr)
+        .then(function(){ done(true); })
+        .catch(function(e){ done(false, e.message || '권한 없음'); });
+    } else {
+      done(false, 'Clipboard API 미지원');
+    }
+  } catch(e) {
+    done(false, e.message || '예외');
+  }
+}
+
+// 인용 영역 HTML의 첫 번째 헤더 div(From/Sent/To/Subject 포함)를 제거하고 본문만 반환.
+// Word 엔진 Outlook은 div 안에 div를 중첩하기도 해서, <div>의 여닫음 균형이 맞는 지점까지 자름.
+function removeFirstHeaderDiv(html){
+  if (!html) return html;
+  // 첫 글자가 <div로 시작하지 않으면 그대로 반환 (헤더 블록이 없음)
+  var trimmed = html.replace(/^\s+/, '');
+  if (!/^<div\b/i.test(trimmed)) return html;
+  // 첫 <div>의 시작
+  var startIdx = html.indexOf('<div');
+  // <div>와 </div>를 차례로 세면서 균형 맞는 위치 찾기
+  var depth = 0;
+  var i = startIdx;
+  var tagRe = /<\/?div\b[^>]*>/gi;
+  tagRe.lastIndex = startIdx;
+  var match;
+  var endIdx = -1;
+  while ((match = tagRe.exec(html)) !== null) {
+    if (match[0][1] === '/') {
+      depth--;
+      if (depth === 0) {
+        endIdx = match.index + match[0].length;
+        break;
+      }
+    } else {
+      depth++;
+    }
+  }
+  if (endIdx === -1) return html;
+  // 첫 div 블록이 헤더인지 확인 (From/Sent/Subject 키워드 포함 여부)
+  var firstBlock = html.substring(startIdx, endIdx);
+  if (!/(From|보낸\s*사람|Sent|보낸\s*날짜|Subject|제목)\s*[:：<]/i.test(firstBlock)) {
+    return html; // 헤더가 아니면 건드리지 않음
+  }
+  var rest = html.substring(endIdx).replace(/^\s+/, '');
+  // Word는 헤더 div 다음에 떠 있는 닫는 </div> 한두 개를 남기기도 함 — 청소
+  rest = rest.replace(/^(?:<\/div>\s*)+/i, '');
+  return rest;
+}
+
+// 회신창 인용 영역에는 메일 스레드가 여러 개 누적됨.
+// removeFirstHeaderDiv로 첫 헤더만 제거하면 직전 송신자 본문 + 그 다음 메일들이 남으므로,
+// 다음 헤더 블록의 시작점을 찾아 그 직전까지만 잘라낸다 = 가장 최근 한 통의 본문만 남김.
+//
+// 구현: DOMParser로 파싱 후 블록 요소(p, div, table)의 textContent를 검사.
+// Word HTML은 텍스트를 매 단어마다 span으로 쪼개기 때문에 텍스트 노드 단위가 아니라
+// 블록 단위로 봐야 "From: ..." 같은 라벨이 평문으로 잡힘.
+function keepUntilNextHeader(html){
+  if (!html) return html;
+  var HEADER_RE = /^(From|Sent|To|Cc|Bcc|Subject|보낸\s*사람|보낸\s*날짜|받는\s*사람|참조|숨은\s*참조|제목|발신)\s*[:：]/i;
+
+  try {
+    var parser = new DOMParser();
+    var doc = parser.parseFromString(
+      '<!DOCTYPE html><html><body><div id="__root">' + html + '</div></body></html>',
+      'text/html'
+    );
+    var root = doc.getElementById('__root');
+    if (!root) return html;
+
+    // 모든 블록 요소 깊이우선 순회, 헤더 라벨로 시작하는 첫 블록 찾기
+    var blocks = root.querySelectorAll('p, div, table');
+    var headerBlock = null;
+    var samples = [];
+    for (var i = 0; i < blocks.length; i++) {
+      var text = (blocks[i].textContent || '').replace(/\u00a0/g, ' ').trim();
+      if (!text) continue;
+      if (samples.length < 8) samples.push(text.substring(0, 80));
+      if (HEADER_RE.test(text)) {
+        headerBlock = blocks[i];
+        break;
+      }
+    }
+
+    if (!headerBlock) {
+      console.log('[TH] keepUntilNextHeader — 다음 헤더 못 찾음. 블록 샘플:');
+      samples.forEach(function(s, idx) { console.log('  ['+idx+']', s); });
+      return html;
+    }
+
+    // root의 직계 자식까지 거슬러 올라가기
+    var topAncestor = headerBlock;
+    while (topAncestor.parentNode && topAncestor.parentNode !== root) {
+      topAncestor = topAncestor.parentNode;
+    }
+    if (!topAncestor || topAncestor.parentNode !== root) return html;
+
+    // topAncestor부터 그 이후 형제들 모두 제거
+    var cur = topAncestor;
+    var removed = 0;
+    while (cur) {
+      var nxt = cur.nextSibling;
+      root.removeChild(cur);
+      removed++;
+      cur = nxt;
+    }
+
+    var result = root.innerHTML;
+    console.log('[TH] keepUntilNextHeader — 블록 방식,', html.length, '→', result.length, '(노드', removed, '개 제거)');
+    return result;
+  } catch(e) {
+    console.log('[TH] keepUntilNextHeader DOM 파싱 오류:', e.message);
+    return html;
+  }
+}
+
+function setDir(d, isManual){
+  direction=d;
+  document.getElementById('btn-ko-en').classList.toggle('active',d==='ko-en');
+  document.getElementById('btn-en-ko').classList.toggle('active',d==='en-ko');
+  if(isManual){
+    dirManuallySet = true;
+    var tag = document.getElementById('auto-tag');
+    if(tag) tag.textContent = '(수동)';
+  }
+}
+
+function runAI(){
+  var engine=document.getElementById('engine-select').value;
+  var provider=engineProvider(engine);
+  var modelId=MODEL_IDS[engine] || null;
+  var key=localStorage.getItem(KEY_MAP[provider])||'';
+  if(!key){
+    var label = provider==='claude' ? 'Claude (Anthropic)' : 'ChatGPT (OpenAI)';
+    showStatus(label+' API 키가 없어요. ⚙ API 키 설정에서 입력해주세요.','error');
+    show('settings-panel'); return;
+  }
+  var subject=document.getElementById('subject').value.trim();
+  var body=document.getElementById('body-orig').value.trim();
+  if(!body){showStatus('원문 본문을 입력해주세요.','error');return;}
+
+  var btn=document.getElementById('ai-btn');
+  btn.disabled=true; btn.textContent='번역 중...';
+  showStatus('번역 중입니다...');
+
+  var srcLang=direction==='ko-en'?'Korean':'English';
+  var tgtLang=direction==='ko-en'?'English':'Korean';
+  var useHtmlMode = document.getElementById('format-mode').checked;
+  var useInterleave = document.getElementById('interleave-mode').checked;
+  
+  // 교차 모드면 분할 번역 경로
+  if (useInterleave && !useHtmlMode) {
+    var chunks = splitForInterleave(body);
+    if (chunks.length === 0){
+      showStatus('원문 본문을 입력해주세요.','error');
+      btn.disabled=false; btn.textContent='AI 자동 번역 ↗';
+      return;
+    }
+    showStatus('교차 모드: ' + chunks.length + '개 단락을 번역 중...');
+    translateChunked(provider, key, chunks, srcLang, tgtLang, modelId).then(function(translations){
+      // 번역문 칸에는 번역만 (사용자가 검수할 수 있도록)
+      document.getElementById('body-tr').value = translations.join('\n\n');
+      // 교차 구성 데이터를 localStorage에 저장 (회신창에서도 접근 가능하게)
+      try { localStorage.setItem('th_interleave', JSON.stringify({originals: chunks, translations: translations})); } catch(e){}
+      showStatus('✓ 번역 완료. ' + chunks.length + '개 단락이 교차 모드로 삽입됩니다.','success');
+    }).catch(function(e){
+      showStatus('번역 오류: '+e.message,'error');
+    }).finally(function(){
+      btn.disabled=false; btn.textContent='AI 자동 번역 ↗';
+    });
+    return;
+  }
+
+  // HTML 모드면 원문을 HTML로 다시 가져오기
+  // - 읽기 모드: 메일 본문 = 인용 영역 이전 (extractLatestHtml)
+  // - 회신창(compose): 원본 메일 = 인용 영역 이후 (extractQuotedHtml)
+  var bodyPromise;
+  if (useHtmlMode) {
+    bodyPromise = new Promise(function(resolve){
+      Office.context.mailbox.item.body.getAsync(Office.CoercionType.Html,function(rH){
+        if (rH.status === Office.AsyncResultStatus.Succeeded) {
+          var fullHtml = rH.value || '';
+          var html = isComposeMode ? extractQuotedHtml(fullHtml) : extractLatestHtml(fullHtml);
+          // 회신창에서는 인용 영역 맨 앞의 From/Sent/Subject 헤더 div를 제거하고 본문만 번역기로 보냄
+          if (isComposeMode) {
+            var beforeLen = html.length;
+            html = removeFirstHeaderDiv(html);
+            html = keepUntilNextHeader(html);
+            console.log('[TH] AI 서식 — 인용 전체:', beforeLen, '/ 첫 메일만:', html.length);
+            console.log('[TH] AI 서식 — 본문 시작 300자:', html.substring(0, 300));
+          }
+          // 추출된 HTML에서 태그 제외한 텍스트가 너무 짧으면(=인용 영역을 못 찾았거나 빈 답장) text로 폴백
+          var plainCheck = html.replace(/<[^>]+>/g,'').replace(/&nbsp;|\s/g,'').trim();
+          if (plainCheck.length < 10) {
+            resolve({mode:'text', body:body});
+          } else {
+            resolve({mode:'html', body:html});
+          }
+        } else {
+          resolve({mode:'text', body:body});
+        }
+      });
+    });
+  } else {
+    bodyPromise = Promise.resolve({mode:'text', body:body});
+  }
+
+  bodyPromise.then(function(payload){
+    var promise;
+    if (payload.mode === 'html') {
+      // 서식 모드: 구조 보존 번역 (AI에게 표 자체를 보여주지 않음)
+      promise = translateHtmlStructurally(payload.body, provider, key, srcLang, tgtLang, modelId, subject);
+    } else if (provider === 'claude') {
+      promise = trClaude(key, subject, payload.body, srcLang, tgtLang, payload.mode, modelId);
+    } else {
+      promise = trOpenAI(key, subject, payload.body, srcLang, tgtLang, payload.mode);
+    }
+
+    return promise.then(function(result){
+      if(result.translatedSubject) document.getElementById('subject-translated').value=result.translatedSubject;
+      document.getElementById('body-tr').value=result.translatedBody||'';
+      if (payload.mode === 'html') {
+        // 서식 모드 결과는 원본 HTML을 메모리에 보관 — textarea 우회용
+        lastHtmlTranslation = result.translatedBody || '';
+        // 표 구조 보존 검증
+        var inTd = (payload.body.match(/<td[\s>]/gi) || []).length;
+        var outTd = ((result.translatedBody||'').match(/<td[\s>]/gi) || []).length;
+        if (inTd >= 2 && outTd < inTd * 0.7) {
+          showStatus('⚠ 서식 모드: AI가 표 구조를 일부 평탄화했습니다 ('+inTd+'개 셀 → '+outTd+'개). 한 번 더 번역하거나 다른 엔진을 시도해보세요.','error');
+        } else {
+          showStatus('✓ 번역 완료 (서식 유지 모드). 회신 만들기를 누르세요.','success');
+        }
+      } else {
+        lastHtmlTranslation = null; // 일반 모드면 보관 안 함
+        showStatus('✓ 번역 완료. 회신 만들기를 누르세요.','success');
+      }
+    });
+  }).catch(function(e){
+    showStatus('번역 오류: '+e.message,'error');
+  }).finally(function(){
+    btn.disabled=false; btn.textContent='AI 자동 번역 ↗';
+  });
+}
+
+// HTML 본문에서 최신 메일 부분만 추출 (인용 영역 제거)
+function extractLatestHtml(html){
+  // Outlook의 인용 구분선/헤더 패턴들
+  var patterns = [
+    /<div[^>]*class=["\']?gmail_quote/i,
+    /<blockquote[^>]*type=["\']?cite["\']?/i,
+    /<div[^>]*id=["\']?divRplyFwdMsg/i,
+    /<hr[^>]*>\s*<b>(보낸 사람|From)/i
+  ];
+  for (var i = 0; i < patterns.length; i++) {
+    var m = html.match(patterns[i]);
+    if (m) {
+      var idx = html.indexOf(m[0]);
+      if (idx > 100) return html.substring(0, idx);
+    }
+  }
+  return html;
+}
+
+// extractQuotedHtml이 반환한 인용 영역에서 From/Sent/To/Subject 헤더 블록을 제거하고 본문만 남김.
+// 인용 헤더는 보통 첫 번째 <div> 또는 <p> 블록 안에 From/Sent/To/Subject가 들어있고,
+// 그 다음 블록부터 진짜 본문임. 손번역 모드에서 [번역문/Translation] 라벨 바로 뒤에
+// 헤더가 또 나오면 중복이라 제거해야 함.
+function stripQuoteHeader(html){
+  if (!html) return html;
+  // 패턴 1: <div ...border-top...><p>From: ... Subject: ...</p></div> 블록을 통째로 제거
+  // (Word 엔진 Outlook의 전형적 마크업)
+  var headerBlock = html.match(/^<div[^>]*style=["\'][^"\']*border-top:[^>]*>[\s\S]*?<\/div>/i);
+  if (headerBlock && /(From|보낸\s*사람|발신|Sent)\s*[:：]/i.test(headerBlock[0])) {
+    return html.substring(headerBlock[0].length).replace(/^\s+/, '');
+  }
+  // 패턴 2: <div id="divRplyFwdMsg"...>...헤더...</div> 통째로 제거
+  var divHeader = html.match(/^<div[^>]*id=["\']?(?:divRplyFwdMsg|appendonsend)[^>]*>[\s\S]*?<\/div>/i);
+  if (divHeader) {
+    return html.substring(divHeader[0].length).replace(/^\s+/, '');
+  }
+  // 패턴 3: 시작이 <hr> + From 헤더로 된 단락이면, 그 단락이 끝날 때까지 제거
+  // <hr>...From:...Subject:...<br></p>  형태
+  var hrHeader = html.match(/^<hr[^>]*>[\s\S]*?<\/p\s*>/i);
+  if (hrHeader && /(From|보낸\s*사람|발신|Sent)\s*[:：]/i.test(hrHeader[0])) {
+    return html.substring(hrHeader[0].length).replace(/^\s+/, '');
+  }
+  // 패턴 4 (폴백): "Subject:" 까지가 헤더 — 그 다음 줄바꿈/태그부터 본문
+  // From, Sent, To, Cc, Subject 줄을 만나면 헤더로 간주하고, Subject 줄의 닫는 태그 다음부터 본문
+  var subjectEnd = html.match(/<b[^>]*>\s*(Subject|제목)\s*<\/b\s*>\s*[:：][^<]*<\/p\s*>/i);
+  if (subjectEnd) {
+    var endIdx = html.indexOf(subjectEnd[0]) + subjectEnd[0].length;
+    // 다음 블록 시작까지 공백/줄바꿈 건너뛰기
+    var rest = html.substring(endIdx).replace(/^\s+/, '');
+    if (rest.length > 20) return rest;
+  }
+  // 헤더 제거 실패 — 원본 그대로 반환 (적어도 작동은 함)
+  return html;
+}
+
+// 회신창에서 인용된 원본 메일 부분만 추출 (extractLatestHtml의 반대)
+// 회신창 본문 = [사용자가 작성 중인 답장] + [인용 구분선/헤더] + [원본 메일]
+// 서식 모드에서는 [원본 메일] 부분을 번역해야 함
+//
+// Outlook 클라이언트마다 마크업이 천차만별이라 패턴을 여러 개 시도:
+// - Outlook for Web / new Outlook: id="divRplyFwdMsg", "Appendonsend" 등
+// - Gmail / 일부 메일 클라이언트: class="gmail_quote"
+// - Outlook 데스크톱 (Word 엔진): border-top 스타일 div + "From:"/"보낸 사람:" 헤더
+// - 폴백: 본문 안에서 "From:" 또는 "보낸 사람:" 텍스트가 단락 시작에 등장하는 첫 위치
+function extractQuotedHtml(html){
+  if (!html) return '';
+  var result = '';
+  // 1차: 명시적 식별자 패턴 (가장 확실)
+  var idPatterns = [
+    /<div[^>]*id=["\']?divRplyFwdMsg/i,
+    /<div[^>]*id=["\']?Signature[^>]*>[\s\S]*?<div[^>]*id=["\']?divRplyFwdMsg/i,
+    /<div[^>]*id=["\']?appendonsend/i,
+    /<div[^>]*class=["\']?gmail_quote/i,
+    /<blockquote[^>]*type=["\']?cite["\']?/i,
+    /<hr[^>]*id=["\']?stopSpelling/i
+  ];
+  for (var i = 0; i < idPatterns.length; i++) {
+    var m = html.match(idPatterns[i]);
+    if (m) {
+      var idx = html.indexOf(m[0]);
+      result = html.substring(idx);
+      break;
+    }
+  }
+  // 2차: 시각적 구분선 패턴 (Word 엔진 Outlook)
+  if (!result) {
+    var stylePatterns = [
+      /<div[^>]*style=["\'][^"\']*border-top:[^"\']*solid/i,
+      /<div[^>]*style=["\'][^"\']*border:\s*none[^"\']*border-top:/i
+    ];
+    for (var i = 0; i < stylePatterns.length; i++) {
+      var m = html.match(stylePatterns[i]);
+      if (m) {
+        var idx = html.indexOf(m[0]);
+        var snippet = html.substring(idx, idx + 2000);
+        if (/(From|보낸\s*사람|발신)\s*[:：]/i.test(snippet)) {
+          result = html.substring(idx);
+          break;
+        }
+      }
+    }
+  }
+  // 3차: <hr> 뒤에 From/보낸 사람 헤더
+  if (!result) {
+    var hrMatch = html.match(/<hr[^>]*>[\s\S]{0,300}?<b[^>]*>\s*(From|보낸\s*사람|발신|Sent)\b/i);
+    if (hrMatch) result = html.substring(html.indexOf(hrMatch[0]));
+  }
+  // 4차 (폴백): 텍스트 검색
+  if (!result) {
+    var headerMatch = html.match(/<\/?\s*(?:b|strong|span)[^>]*>\s*(?:From|보낸\s*사람|발신|Sent)\s*<\/(?:b|strong|span)>\s*:/i);
+    if (!headerMatch) {
+      headerMatch = html.match(/(?:^|>)\s*(?:<[^>]+>\s*)*?(?:From|보낸\s*사람|발신)\s*(?:<\/[^>]+>\s*)*?:/i);
+    }
+    if (headerMatch) {
+      var idx = html.indexOf(headerMatch[0]);
+      var blockStart = Math.max(
+        html.lastIndexOf('<div', idx),
+        html.lastIndexOf('<p', idx),
+        html.lastIndexOf('<table', idx)
+      );
+      if (blockStart > 0 && idx - blockStart < 2000) {
+        result = html.substring(blockStart);
+      } else {
+        result = html.substring(idx);
+      }
+    }
+  }
+  if (!result) return '';
+  // 추출된 HTML에서 문서 구조 닫는 태그 제거 (회신 본문 재삽입 시 HTML 깨짐 방지)
+  result = result
+    .replace(/<\/body\s*>[\s\S]*$/i, '')  // </body> 이후 모두 제거
+    .replace(/<\/html\s*>[\s\S]*$/i, '')  // </html> 이후 모두 제거
+    .trim();
+  return result;
+}
+
+// 구조 보존 번역: HTML의 텍스트 노드만 추출해서 chunk 단위로 번역하고 원위치에 다시 채워넣음.
+// AI는 평면적인 텍스트 배열만 받으므로 표나 div 같은 구조를 망칠 수 없다.
+function translateHtmlStructurally(htmlString, provider, key, srcLang, tgtLang, modelId, subject){
+  return new Promise(function(resolve, reject){
+    var parser = new DOMParser();
+    var docu = parser.parseFromString('<!DOCTYPE html><html><body>'+htmlString+'</body></html>', 'text/html');
+    var root = docu.body;
+
+    // 모든 텍스트 노드를 순서대로 수집 (script/style 안쪽은 제외, 공백만 있는 노드도 제외)
+    var textNodes = [];
+    var walker = docu.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode: function(n){
+        var parentTag = n.parentNode && n.parentNode.tagName;
+        if (parentTag === 'SCRIPT' || parentTag === 'STYLE') return NodeFilter.FILTER_REJECT;
+        if (!n.nodeValue || !n.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    }, false);
+    var node;
+    while ((node = walker.nextNode())) textNodes.push(node);
+
+    if (textNodes.length === 0) {
+      resolve({translatedSubject: subject, translatedBody: htmlString});
+      return;
+    }
+
+    // 0번 슬롯에 subject, 그 뒤에 텍스트 노드들
+    var allChunks = [subject || '(none)'].concat(textNodes.map(function(n){ return n.nodeValue.trim(); }));
+
+    translateChunked(provider, key, allChunks, srcLang, tgtLang, modelId)
+      .then(function(translations){
+        var translatedSubject = (translations[0] && translations[0].trim()) || subject;
+        // 원본의 leading/trailing 공백을 보존하면서 텍스트만 교체
+        textNodes.forEach(function(n, i){
+          var tr = translations[i+1];
+          if (tr != null && tr !== '') {
+            var orig = n.nodeValue;
+            var leading = (orig.match(/^\s+/) || [''])[0];
+            var trailing = (orig.match(/\s+$/) || [''])[0];
+            n.nodeValue = leading + String(tr).trim() + trailing;
+          }
+        });
+        resolve({
+          translatedSubject: translatedSubject,
+          translatedBody: root.innerHTML
+        });
+      })
+      .catch(reject);
+  });
+}
+
+function trClaude(key,subject,body,srcLang,tgtLang,mode,modelId){
+  var sysMsg;
+  if (mode === 'html') {
+    sysMsg = 'You are a professional translator. The body is HTML markup. Translate ONLY the visible text from '+srcLang+' to '+tgtLang+'.\n\n' +
+      'CRITICAL RULES:\n' +
+      '1. PRESERVE every HTML tag, attribute, class, style, and structure EXACTLY as-is. Do NOT add, remove, merge, or restructure any tags.\n' +
+      '2. For tables: every <td>, <tr>, <th>, <tbody>, <thead> tag MUST appear in the output exactly once, in the same order. Translate only the text INSIDE each cell. NEVER merge multiple cells into one. NEVER flatten a table into a paragraph.\n' +
+      '3. One cell in = one cell out. If the input has 9 <td> tags, the output must have 9 <td> tags.\n' +
+      '4. Keep <br>, <p>, <div> exactly where they are.\n' +
+      '5. Translate text inside attributes only if it is visible (e.g. alt=, title=); leave href/src/class/style values untouched.\n\n' +
+      'Example:\n' +
+      'Input:  <table><tr><td>엄마야</td><td>누나야</td></tr></table>\n' +
+      'Output: <table><tr><td>Mother</td><td>Sister</td></tr></table>\n' +
+      '(NOT: <p>Mother Sister</p> — this would be WRONG.)\n\n' +
+      'Return ONLY a JSON object: {"translatedSubject":"...","translatedBody":"<full html with translated text>"}. The translatedBody value MUST be a valid HTML string with all original tags preserved.';
+  } else {
+    sysMsg = 'Professional translator. Translate from '+srcLang+' to '+tgtLang+'. Return ONLY JSON: {"translatedSubject":"...","translatedBody":"..."}';
+  }
+  return fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+    body:JSON.stringify({model:modelId||'claude-haiku-4-5-20251001',max_tokens:16000,
+      system:sysMsg,
+      messages:[{role:'user',content:'Subject: '+(subject||'(none)')+'\n\nBody:\n'+body}]})
+  }).then(function(r){return r.text().then(function(t){
+    if(!r.ok){var e=JSON.parse(t);throw new Error(e.error&&e.error.message||'HTTP '+r.status);}
+    var data=JSON.parse(t);
+    var raw=data.content.map(function(b){return b.text||'';}).join('');
+    return parseTranslationJson(raw);
+  });});
+}
+function trOpenAI(key,subject,body,srcLang,tgtLang,mode){
+  var sysMsg;
+  if (mode === 'html') {
+    sysMsg = 'You are a professional translator. The body is HTML markup. Translate ONLY the visible text from '+srcLang+' to '+tgtLang+'.\n\n' +
+      'CRITICAL RULES:\n' +
+      '1. PRESERVE every HTML tag, attribute, class, style, and structure EXACTLY as-is. Do NOT add, remove, merge, or restructure any tags.\n' +
+      '2. For tables: every <td>, <tr>, <th>, <tbody>, <thead> tag MUST appear in the output exactly once, in the same order. Translate only the text INSIDE each cell. NEVER merge multiple cells into one. NEVER flatten a table into a paragraph.\n' +
+      '3. One cell in = one cell out. If the input has 9 <td> tags, the output must have 9 <td> tags.\n' +
+      '4. Keep <br>, <p>, <div> exactly where they are.\n' +
+      '5. Translate text inside attributes only if it is visible (e.g. alt=, title=); leave href/src/class/style values untouched.\n\n' +
+      'Example:\n' +
+      'Input:  <table><tr><td>엄마야</td><td>누나야</td></tr></table>\n' +
+      'Output: <table><tr><td>Mother</td><td>Sister</td></tr></table>\n' +
+      '(NOT: <p>Mother Sister</p> — this would be WRONG.)\n\n' +
+      'Return ONLY a JSON object: {"translatedSubject":"...","translatedBody":"<full html with translated text>"}. The translatedBody value MUST be a valid HTML string with all original tags preserved.';
+  } else {
+    sysMsg = 'Professional translator. Translate from '+srcLang+' to '+tgtLang+'. Return ONLY JSON: {"translatedSubject":"...","translatedBody":"..."}';
+  }
+  return fetch('https://api.openai.com/v1/chat/completions',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
+    body:JSON.stringify({model:'gpt-4o-mini',max_tokens:16000,
+      messages:[
+        {role:'system',content:sysMsg},
+        {role:'user',content:'Subject: '+(subject||'(none)')+'\n\nBody:\n'+body}
+      ]})
+  }).then(function(r){return r.text().then(function(t){
+    if(!r.ok){var e=JSON.parse(t);throw new Error(e.error&&e.error.message||'HTTP '+r.status);}
+    var data=JSON.parse(t);
+    var raw=data.choices[0].message.content;
+    return parseTranslationJson(raw);
+  });});
+}
+
+// JSON 파싱 with fallback (응답이 잘려도 번역문은 살림)
+function parseTranslationJson(raw){
+  var cleaned = raw.replace(/```json|```/g,'').trim();
+  try {
+    return JSON.parse(cleaned);
+  } catch(e) {
+    // JSON 파싱 실패 시 정규식으로 필드 추출
+    var subjMatch = cleaned.match(/"translatedSubject"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+    var bodyMatch = cleaned.match(/"translatedBody"\s*:\s*"((?:[^"\\]|\\.)*)/);
+    var result = {};
+    if (subjMatch) result.translatedSubject = subjMatch[1].replace(/\\n/g,'\n').replace(/\\"/g,'"');
+    if (bodyMatch) {
+      var bodyText = bodyMatch[1].replace(/\\n/g,'\n').replace(/\\"/g,'"');
+      result.translatedBody = bodyText + (cleaned.endsWith('"}') ? '' : '\n\n[⚠️ 번역이 중간에 끊겼을 수 있습니다. 본문이 너무 길면 나눠서 번역해주세요.]');
+    }
+    if (!result.translatedBody) throw new Error('응답 파싱 실패: ' + cleaned.substring(0, 100));
+    return result;
+  }
+}
+
+// ── 원문을 의미 단위로 분할 (교차 모드용) ──
+function splitForInterleave(text){
+  if (!text) return [];
+  // 1차: 빈 줄 기준 문단 분할
+  var paragraphs = text.split(/\n\s*\n/).map(function(p){return p.trim();}).filter(function(p){return p.length > 0;});
+  var result = [];
+  paragraphs.forEach(function(p){
+    // 짧은 줄(≤100자) 2개 이상이 단일 \n으로만 연결돼 있으면 리스트로 간주 → 줄 단위 분할
+    // (예: "Chagee tea\nMilk tea\nBoba tea")
+    var lines = p.split(/\n/).map(function(l){return l.trim();}).filter(function(l){return l.length > 0;});
+    if (lines.length >= 2 && lines.every(function(l){return l.length <= 100;})) {
+      lines.forEach(function(l){ result.push(l); });
+      return;
+    }
+    // 일반 케이스: 너무 긴 문단(500자 이상)은 문장 단위로 추가 분할
+    if (p.length <= 500) {
+      result.push(p);
+    } else {
+      // 문장 단위 분할: . ! ? 또는 한국어 종결어미
+      var sentences = p.split(/(?<=[.!?。])\s+|(?<=[다요죠].)\s+/).filter(function(s){return s.trim().length > 0;});
+      // 다시 합쳐서 너무 짧으면 묶기
+      var chunk = '';
+      sentences.forEach(function(s){
+        if ((chunk + s).length > 500 && chunk) {
+          result.push(chunk.trim());
+          chunk = s;
+        } else {
+          chunk += (chunk ? ' ' : '') + s;
+        }
+      });
+      if (chunk.trim()) result.push(chunk.trim());
+    }
+  });
+  return result;
+}
+
+// 분할 번역 (서식 모드 + 교차 모드 공통)
+// 긴 메일은 한 번에 보내면 max_tokens에 막혀 응답이 잘림.
+// 따라서 chunk를 BATCH_SIZE 단위로 쪼개 여러 번 호출 후 결과 합침.
+var TRANSLATE_BATCH_SIZE = 80;   // 한 호출당 최대 텍스트 노드 수
+var TRANSLATE_MAX_TOKENS = 32000; // 호출당 응답 한도
+
+function translateChunked(provider, key, chunks, srcLang, tgtLang, modelId){
+  // 배치로 분할
+  var batches = [];
+  for (var i = 0; i < chunks.length; i += TRANSLATE_BATCH_SIZE) {
+    batches.push(chunks.slice(i, i + TRANSLATE_BATCH_SIZE));
+  }
+  console.log('[TH] 분할 번역: 총', chunks.length, '청크 →', batches.length, '배치');
+
+  // 배치를 순차 호출 (병렬은 rate limit 위험)
+  var allTranslations = [];
+  var p = Promise.resolve();
+  batches.forEach(function(batch, bIdx){
+    p = p.then(function(){
+      return translateOneBatch(provider, key, batch, srcLang, tgtLang, modelId, bIdx, batches.length);
+    }).then(function(batchResults){
+      allTranslations = allTranslations.concat(batchResults);
+    });
+  });
+  return p.then(function(){ return allTranslations; });
+}
+
+function translateOneBatch(provider, key, batchChunks, srcLang, tgtLang, modelId, bIdx, total){
+  // 배치 내부에서 id는 0부터 다시 시작 (AI가 헷갈리지 않게)
+  var chunksJson = batchChunks.map(function(c, i){ return {id: i, text: c}; });
+  var promptUser = 'Translate each chunk below from ' + srcLang + ' to ' + tgtLang +
+    '. Return ONLY a JSON array in this exact format: [{"id":0,"translation":"..."},{"id":1,"translation":"..."}]. ' +
+    'Preserve the order. Include ALL ' + batchChunks.length + ' chunks in the response. Chunks:\n' +
+    JSON.stringify(chunksJson);
+  var sysMsg = 'Professional translator translating from ' + srcLang + ' to ' + tgtLang + '. ' +
+    'Translate accurately and naturally. Return ONLY a valid JSON array, no markdown, no explanation.\n\n' +
+    'LANGUAGE RULES (critical):\n' +
+    '- Each chunk is a fragment of a larger ' + srcLang + ' document, split by HTML structure.\n' +
+    '- If a chunk is ALREADY in ' + tgtLang + ' (e.g. brand names, technical terms, proper nouns, embedded English words in a Korean document, or vice versa), return it UNCHANGED. Do NOT back-translate.\n' +
+    '- If a chunk is a person name, company name, email address, URL, phone number, or numeric value, return it UNCHANGED regardless of language.\n' +
+    '- Translate only chunks actually written in ' + srcLang + '.\n\n' +
+    'JSON RULES (critical):\n' +
+    '(1) Inside translation values, escape every double quote as \\".\n' +
+    '(2) Escape backslashes as \\\\.\n' +
+    '(3) Replace literal newlines inside a translation value with \\n.\n' +
+    '(4) Do NOT wrap the array in markdown code fences.\n' +
+    '(5) Prefer Korean-style quotes (\u201C \u201D \u300C \u300D) over straight ASCII quotes in Korean output to avoid JSON escaping issues.';
+
+  if (provider === 'claude') {
+    return fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:modelId||'claude-haiku-4-5-20251001',max_tokens:TRANSLATE_MAX_TOKENS,system:sysMsg,messages:[{role:'user',content:promptUser}]})
+    }).then(function(r){return r.text().then(function(t){
+      if(!r.ok){var e=JSON.parse(t);throw new Error(e.error&&e.error.message||'HTTP '+r.status);}
+      var data=JSON.parse(t);
+      var raw=data.content.map(function(b){return b.text||'';}).join('');
+      var stopReason = data.stop_reason;
+      console.log('[TH] 배치', (bIdx+1)+'/'+total, '— stop_reason:', stopReason, ', 응답 길이:', raw.length);
+      return parseChunkedResult(raw, batchChunks, stopReason, bIdx, total);
+    });});
+  } else {
+    return fetch('https://api.openai.com/v1/chat/completions',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
+      body:JSON.stringify({model:'gpt-4o-mini',max_tokens:TRANSLATE_MAX_TOKENS,messages:[{role:'system',content:sysMsg},{role:'user',content:promptUser}]})
+    }).then(function(r){return r.text().then(function(t){
+      if(!r.ok){var e=JSON.parse(t);throw new Error(e.error&&e.error.message||'HTTP '+r.status);}
+      var data=JSON.parse(t);
+      var raw=data.choices[0].message.content;
+      var finishReason = data.choices[0].finish_reason;
+      console.log('[TH] 배치', (bIdx+1)+'/'+total, '— finish_reason:', finishReason, ', 응답 길이:', raw.length);
+      return parseChunkedResult(raw, batchChunks, finishReason, bIdx, total);
+    });});
+  }
+}
+
+function parseChunkedResult(raw, originalChunks, stopReason, bIdx, total){
+  var cleaned = raw.replace(/```json|```/g,'').trim();
+  var batchLabel = (typeof bIdx === 'number') ? '배치 ' + (bIdx+1) + '/' + total : '';
+
+  // 1차 시도: 그대로 JSON.parse
+  try {
+    var arr = JSON.parse(cleaned);
+    if (!Array.isArray(arr)) throw new Error('not array');
+    arr.sort(function(a,b){return (a.id||0) - (b.id||0);});
+    var translations = arr.map(function(item){return item.translation || '';});
+    if (translations.length !== originalChunks.length) {
+      console.warn('[TH]', batchLabel, '청크 수 불일치:', translations.length, 'vs', originalChunks.length);
+      while (translations.length < originalChunks.length) {
+        translations.push(originalChunks[translations.length]);
+      }
+    }
+    return translations;
+  } catch(e) {
+    var parseErr = e.message || '';
+    var posMatch = parseErr.match(/position\s+(\d+)/i);
+    var errPos = posMatch ? parseInt(posMatch[1], 10) : -1;
+    console.warn('[TH]', batchLabel, '1차 파싱 실패:', parseErr, '/ 위치:', errPos);
+    if (errPos > 0) {
+      var contextStart = Math.max(0, errPos - 60);
+      var contextEnd = Math.min(cleaned.length, errPos + 60);
+      console.warn('[TH] 깨진 자리 컨텍스트:', cleaned.substring(contextStart, contextEnd));
+    }
+
+    // 2차 시도: 응답이 잘렸을 가능성 — 마지막 완전한 항목까지 추출
+    var lastValidIdx = cleaned.lastIndexOf('"}');
+    if (lastValidIdx > 0) {
+      var partial = cleaned.substring(0, lastValidIdx + 2) + ']';
+      try {
+        var arr2 = JSON.parse(partial);
+        if (Array.isArray(arr2)) {
+          arr2.sort(function(a,b){return (a.id||0) - (b.id||0);});
+          var partialTr = arr2.map(function(item){return item.translation || '';});
+          console.warn('[TH]', batchLabel, '2차(잘림) 복구 성공:', partialTr.length, '/', originalChunks.length);
+          while (partialTr.length < originalChunks.length) {
+            partialTr.push(originalChunks[partialTr.length]);
+          }
+          return partialTr;
+        }
+      } catch(e2) { /* fall through to regex */ }
+    }
+
+    // 3차 시도: 정규식으로 entry 하나하나 추출 (중간에 깨진 항목만 스킵)
+    var recovered = new Array(originalChunks.length);
+    var entryRe = /\{\s*"id"\s*:\s*(\d+)\s*,\s*"translation"\s*:\s*"((?:\\.|[^"\\])*)"\s*\}/g;
+    var m;
+    var foundCount = 0;
+    while ((m = entryRe.exec(cleaned)) !== null) {
+      var id = parseInt(m[1], 10);
+      if (id >= 0 && id < originalChunks.length) {
+        // \"  \\  \n 등 escape 복원
+        var tr = m[2]
+          .replace(/\\"/g, '"')
+          .replace(/\\\\/g, '\\')
+          .replace(/\\n/g, '\n')
+          .replace(/\\r/g, '\r')
+          .replace(/\\t/g, '\t')
+          .replace(/\\\//g, '/');
+        recovered[id] = tr;
+        foundCount++;
+      }
+    }
+    if (foundCount > 0) {
+      // 못 찾은 자리는 원문으로 채움
+      for (var i = 0; i < recovered.length; i++) {
+        if (recovered[i] == null) recovered[i] = originalChunks[i];
+      }
+      console.warn('[TH]', batchLabel, '3차(정규식) 복구:', foundCount, '/', originalChunks.length,
+        '(부족분', originalChunks.length - foundCount, '개는 원문 유지)');
+      return recovered;
+    }
+
+    // 완전 실패 — 응답 꼬리 200자 표시
+    var tail = cleaned.length > 200 ? '...' + cleaned.substring(cleaned.length - 200) : cleaned;
+    var reasonHint = (stopReason === 'max_tokens' || stopReason === 'length')
+      ? ' [응답 토큰 한도 초과]'
+      : (errPos > 0 ? ' [JSON 깨짐 위치: ' + errPos + ']' : '');
+    throw new Error('응답 파싱 실패' + (batchLabel ? ' (' + batchLabel + ')' : '') + reasonHint + '. 꼬리: ' + tail);
+  }
+}
+
+
+function showStatus(msg,type){
+  var el=document.getElementById('status-msg');
+  el.textContent=msg;el.className='status'+(type?' '+type:'');el.classList.remove('hidden');
+  if(type==='success') setTimeout(function(){el.classList.add('hidden');},4000);
+}
+
+function buildHtml(currentHtml,subjectLine,bodyTr,bodyOrig){
+  var mg='font-family:\'Malgun Gothic\',\'맑은 고딕\',sans-serif;font-size:11pt;color:#4472C4;';
+  var mgb='font-family:\'Malgun Gothic\',\'맑은 고딕\',sans-serif;font-size:11pt;color:#4472C4;font-weight:bold;';
+  var plain='font-family:\'Malgun Gothic\',\'맑은 고딕\',sans-serif;font-size:11pt;';
+  var topHeader=
+    '<div style="'+mg+'">[번역/Translated] '+esc(subjectLine)+'</div>'+
+    '<div>&nbsp;</div>'+
+    '<div style="'+mg+'">번역문이 추가되었습니다.</div>'+
+    '<div style="'+mg+'">Translation has been added.</div>'+
+    '<div>&nbsp;</div>';
+  var pending = getPendingForBuild();
+  var isHtml = pending && pending.isHtml;
+  var isInterleave = pending && pending.isInterleave;
+  var translationSection;
+  
+  var interleaveData = null;
+  if (isInterleave) {
+    try { var ild = localStorage.getItem('th_interleave'); if(ild) interleaveData = JSON.parse(ild); } catch(e){}
+  }
+  if (isInterleave && interleaveData) {
+    // 교차 모드: 헤더 한 번 + 원문/번역문 짝지어 배치
+    var data = interleaveData;
+    var parts = ['<div>&nbsp;</div>'];
+    parts.push('<div style="'+mgb+'">[번역문 / Translation]</div>');
+    parts.push('<div>&nbsp;</div>');
+    for (var i = 0; i < Math.max(data.originals.length, data.translations.length); i++) {
+      var orig = data.originals[i] || '';
+      var trans = data.translations[i] || '';
+      parts.push('<div style="'+plain+'">' + esc(orig) + '</div>');
+      parts.push('<div style="'+plain+'">' + esc(trans) + '</div>');
+      parts.push('<div>&nbsp;</div>');
+    }
+    parts.push('<div>---</div>');
+    parts.push('<div>&nbsp;</div>');
+    parts.push('<div style="'+mgb+'">[원문 / Original]</div>');
+    parts.push('<div>&nbsp;</div>');
+    for (var i = 0; i < data.originals.length; i++) {
+      parts.push('<div style="'+plain+'">' + esc(data.originals[i] || '') + '</div>');
+    }
+    parts.push('<div>&nbsp;</div>');
+    translationSection = parts.join('');
+  } else {
+    var isOrigOnly = pending && pending.origOnly;
+    var isPartialOrig = pending && pending.isPartial;
+    if (isOrigOnly) {
+      // 번역문 없음 → 원문 라벨만 + (부분 캡처일 때만) bodyOrig 명시 삽입
+      // 전체 본문 모드에서는 아웃룩 자동 인용이 원문 역할을 하므로 중복 방지 위해 생략
+      translationSection =
+        '<div>&nbsp;</div>'+
+        '<div style="'+mgb+'">[원문 / Original]</div>'+
+        '<div>&nbsp;</div>';
+      if (isPartialOrig) {
+        var bodyOrigHtml2 = esc(bodyOrig);
+        translationSection += '<div style="'+plain+'">'+bodyOrigHtml2+'</div><div>&nbsp;</div>';
+      }
+    } else {
+      // 기존 방식: 번역문 통째 + --- + 원문 통째
+      var bodyTrHtml = isHtml ? bodyTr : esc(bodyTr);
+      translationSection=
+        '<div>&nbsp;</div>'+
+        '<div style="'+mgb+'">[번역문 / Translation]</div>'+
+        '<div>&nbsp;</div>'+
+        '<div style="'+plain+'">'+bodyTrHtml+'</div>'+
+        '<div>&nbsp;</div>'+
+        '<div>---</div>'+
+        '<div>&nbsp;</div>'+
+        '<div style="'+mgb+'">[원문 / Original]</div>'+
+        '<div>&nbsp;</div>';
+      // 클립보드로 일부만 가져온 경우에만 bodyOrig 명시 삽입
+      if (isPartialOrig) {
+        var bodyOrigHtml = isHtml ? bodyOrig : esc(bodyOrig);
+        translationSection += '<div style="'+plain+'">'+bodyOrigHtml+'</div><div>&nbsp;</div>';
+      }
+    }
+  }
+  var html=currentHtml;
+  if(/<body[^>]*>/i.test(html)){html=html.replace(/(<body[^>]*>)/i,'$1'+topHeader);}
+  else{html=topHeader+html;}
+  var patterns=[
+    /(<b>제목[^:]*:?<\/b>[^<]*(?:<br\s*\/?>)?)/i,
+    /(<b>Subject[^:]*:?<\/b>[^<]*(?:<br\s*\/?>)?)/i,
+    /(<strong>제목[^:]*:?<\/strong>[^<]*(?:<br\s*\/?>)?)/i,
+    /(<strong>Subject[^:]*:?<\/strong>[^<]*(?:<br\s*\/?>)?)/i
+  ];
+  var inserted=false;
+  for(var i=0;i<patterns.length;i++){
+    if(patterns[i].test(html)){html=html.replace(patterns[i],'$1'+translationSection);inserted=true;break;}
+  }
+  if(!inserted){
+    var hrMatch=html.match(/<hr[^>]*>/i);
+    if(hrMatch){var idx=html.indexOf(hrMatch[0])+hrMatch[0].length;html=html.slice(0,idx)+translationSection+html.slice(idx);}
+    else{html=html.replace(/<\/body>/i,translationSection+'</body>');}
+  }
+  return html;
+}
+
+function esc(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');}
+function stripTH(text){
+  return text.replace(/\[번역\/Translated\][^\n]*/gi,'').replace(/번역문이 추가되었습니다\.?/gi,'')
+    .replace(/Translation has been added\.?/gi,'').replace(/\[번역문\s*\/\s*Translation\]/gi,'')
+    .replace(/\[원문\s*\/\s*Original\]/gi,'').replace(/^---\s*$/gm,'').replace(/\n{3,}/g,'\n\n').trim();
+}
+</script>
+</body>
+</html>
