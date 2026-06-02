@@ -511,16 +511,17 @@ function translateSelection(){
     // 모델/키 가져오기
     var modelSel = document.getElementById('ai-model');
     var modelVal = modelSel ? modelSel.value : 'claude-haiku';
-    var provider, key, modelId;
-    if (modelVal === 'openai') {
-      provider = 'openai';
-      key = localStorage.getItem('th_openai_key') || '';
-      if (!key) { btn.disabled = false; btn.textContent = origLabel; showStatus('ChatGPT API 키가 없어요. ⚙ 설정에서 입력하세요.','error'); return; }
-    } else {
-      provider = 'claude';
-      key = localStorage.getItem('th_claude_key') || '';
-      if (!key) { btn.disabled = false; btn.textContent = origLabel; showStatus('Claude API 키가 없어요. ⚙ 설정에서 입력하세요.','error'); return; }
-      modelId = (modelVal === 'claude-sonnet') ? 'claude-sonnet-4-6' : 'claude-haiku-4-5-20251001';
+    var provider = engineProvider(modelVal);
+    var key = localStorage.getItem(KEY_MAP[provider]) || '';
+    var modelId;
+    if (!key) {
+      btn.disabled = false; btn.textContent = origLabel;
+      var keyLabel = provider === 'openai' ? 'ChatGPT' : 'Claude';
+      showStatus(keyLabel + ' API 키가 없어요. ⚙ 설정에서 입력하세요.', 'error');
+      return;
+    }
+    if (provider === 'claude') {
+      modelId = MODEL_IDS[modelVal] || 'claude-haiku-4-5-20251001';
     }
 
     // 구조 보존 번역
