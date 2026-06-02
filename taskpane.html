@@ -584,20 +584,14 @@ function translateSelection(){
 
         console.log('[TH] 선택 영역 — 클립보드 HTML 길이:', clipHtml.length);
 
-        // 자동 복사 시도 (포커스 잃은 상태면 거의 실패함 — 그땐 수동 복사 버튼 표시)
-        copyToClipboard(clipHtml, clipText, function(ok, errMsg){
-          btn.disabled = false; btn.textContent = origLabel;
-          if (ok) {
-            showStatus('✅ 번역 완료, 클립보드에 복사됨. 회신 본문 맨 위에 Ctrl+V 하세요.', 'success');
-            return;
-          }
-          // 자동 복사 실패 → 사용자가 직접 누를 버튼 표시
-          window._pendingClipHtml = clipHtml;
-          window._pendingClipText = clipText;
-          document.getElementById('body-tr').value = clipText;
-          showCopyButton();
-          showStatus('번역 완료. 아래 초록 버튼을 눌러 클립보드에 복사하세요.', 'success');
-        });
+        // 자동 복사 시도 안 함 — Office iframe에선 navigator.clipboard.write가 멈추거나 거부되므로,
+        // 처음부터 사용자 클릭에 의존하는 게 안전함.
+        window._pendingClipHtml = clipHtml;
+        window._pendingClipText = clipText;
+        document.getElementById('body-tr').value = clipText;
+        showCopyButton();
+        btn.disabled = false; btn.textContent = origLabel;
+        showStatus('번역 완료. 아래 초록 버튼을 눌러 클립보드에 복사하세요.', 'success');
       })
       .catch(function(err){
         btn.disabled = false; btn.textContent = origLabel;
