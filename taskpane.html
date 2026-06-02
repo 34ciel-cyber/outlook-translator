@@ -565,15 +565,20 @@ function translateSelection(){
 
         // 회신 본문 맨 위에 헤더(번역문이 추가되었습니다 + 제목)가 없으면 한 번만 추가
         ensureReplyTopHeader(function(){
+          // 자동 복사 시도 (포커스 잃은 상태면 거의 실패함 — 그땐 수동 복사 버튼 표시)
           copyToClipboard(clipHtml, clipText, function(ok, errMsg){
             btn.disabled = false; btn.textContent = origLabel;
             if (ok) {
               showStatus('✅ 번역 완료, 클립보드에 복사됨. 원하는 위치에 Ctrl+V 하세요.', 'success');
-            } else {
-              // 폴백: textarea에 결과 표시해서 수동 복사 유도
-              document.getElementById('body-tr').value = clipText;
-              showStatus('번역은 됐는데 자동 복사가 안 됐어요(' + errMsg + '). 번역문 영역에서 직접 복사하세요.', 'error');
+              return;
             }
+            // 자동 복사 실패 → 사용자가 직접 누를 버튼 표시 (포커스 보장된 클릭이라 거의 항상 성공)
+            // 결과는 메모리에 보관, 폴백 textarea도 같이 채움
+            window._pendingClipHtml = clipHtml;
+            window._pendingClipText = clipText;
+            document.getElementById('body-tr').value = clipText;
+            showCopyButton();
+            showStatus('번역 완료. 아래 초록 버튼을 눌러 클립보드에 복사하세요.', 'success');
           });
         });
       })
@@ -582,6 +587,39 @@ function translateSelection(){
         showStatus('번역 오류: ' + (err.message || err), 'error');
       });
   });
+}
+
+// 자동 복사가 실패했을 때 사용자가 직접 누를 수 있는 큰 버튼을 표시.
+// 사용자 클릭은 반드시 포커스를 가지므로 navigator.clipboard.write가 거의 항상 성공함.
+function showCopyButton(){
+  var existing = document.getElementById('manual-copy-btn');
+  if (existing) { existing.style.display = 'block'; return; }
+  var btn = document.createElement('button');
+  btn.id = 'manual-copy-btn';
+  btn.className = 'btn-green';
+  btn.textContent = '📋 클립보드에 복사 (눌러주세요)';
+  btn.style.marginTop = '8px';
+  btn.onclick = function(){
+    var h = window._pendingClipHtml || '';
+    var t = window._pendingClipText || '';
+    copyToClipboard(h, t, function(ok, errMsg){
+      if (ok) {
+        showStatus('✅ 클립보드에 복사됨. 원하는 위치에 Ctrl+V 하세요.', 'success');
+        btn.style.display = 'none';
+        window._pendingClipHtml = null;
+        window._pendingClipText = null;
+      } else {
+        showStatus('복사 실패 (' + errMsg + '). 번역문 영역에서 직접 복사하세요.', 'error');
+      }
+    });
+  };
+  // 메인 "현재 회신에 삽입" 버튼 바로 위에 붙임
+  var anchor = document.getElementById('create-btn');
+  if (anchor && anchor.parentNode) {
+    anchor.parentNode.insertBefore(btn, anchor);
+  } else {
+    document.body.appendChild(btn);
+  }
 }
 
 // 회신 본문 맨 위에 [번역/Translated] 제목 헤더가 없으면 prependAsync로 한 번만 추가.
