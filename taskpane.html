@@ -534,12 +534,31 @@ function translateSelection(){
 
         // 라벨 스타일: Outlook이 div보다 span/p 인라인 스타일을 더 잘 존중함.
         var labelStyle = "font-family:'Malgun Gothic','맑은 고딕',sans-serif; font-size:11pt; color:#4472C4; font-weight:bold; mso-color-alt:#4472C4;";
+        var lightStyle = "font-family:'Malgun Gothic','맑은 고딕',sans-serif; font-size:11pt; color:#4472C4;";
         function label(text){
           return '<p style="margin:0; padding:0;"><span style="' + labelStyle + '">' + text + '</span></p>';
         }
+        function lightLine(text){
+          return '<p style="margin:0; padding:0;"><span style="' + lightStyle + '">' + text + '</span></p>';
+        }
         function spacer(){ return '<p style="margin:0; padding:0;">&nbsp;</p>'; }
 
+        // 회신 메일 제목 가져오기 (헤더용)
+        var subj = '';
+        try { subj = Office.context.mailbox.item.subject || ''; } catch(e) {}
+        var cleanSubj = subj.replace(/^\s*(Re:|RE:|Fw:|FW:|Fwd:|FWD:|회신:|전달:)\s*/i, '').trim();
+        var safeSubj = cleanSubj.replace(/[<>&]/g, function(c){
+          return c === '<' ? '&lt;' : c === '>' ? '&gt;' : '&amp;';
+        });
+
         var clipBodyHtml =
+          // 회신 본문 최상단 헤더
+          lightLine('[번역/Translated] ' + safeSubj) +
+          spacer() +
+          lightLine('번역문이 추가되었습니다.') +
+          lightLine('Translation has been added.') +
+          spacer() +
+          // 번역문 섹션
           label('[번역문 / Translation]') +
           spacer() +
           '<div>' + translatedHtml + '</div>' +
@@ -550,36 +569,34 @@ function translateSelection(){
           spacer();
 
         // Outlook은 ClipboardItem이 *완전한 HTML 문서*일 때 인라인 색을 더 잘 존중함.
-        // text/html에는 풀 래퍼, 평문 폴백은 따로.
         var clipHtml =
           '<html><head><meta charset="utf-8"><meta http-equiv="Content-Type" content="text/html; charset=utf-8"></head>' +
           '<body>' + clipBodyHtml + '</body></html>';
 
         // 평문 폴백
         var clipText =
+          '[번역/Translated] ' + cleanSubj + '\n\n' +
+          '번역문이 추가되었습니다.\n' +
+          'Translation has been added.\n\n' +
           '[번역문 / Translation]\n\n' +
           translatedHtml.replace(/<[^>]+>/g,'').replace(/&nbsp;/g,' ').replace(/\s+\n/g,'\n').trim() +
           '\n\n---\n\n[원문 / Original]\n';
 
         console.log('[TH] 선택 영역 — 클립보드 HTML 길이:', clipHtml.length);
 
-        // 회신 본문 맨 위에 헤더(번역문이 추가되었습니다 + 제목)가 없으면 한 번만 추가
-        ensureReplyTopHeader(function(){
-          // 자동 복사 시도 (포커스 잃은 상태면 거의 실패함 — 그땐 수동 복사 버튼 표시)
-          copyToClipboard(clipHtml, clipText, function(ok, errMsg){
-            btn.disabled = false; btn.textContent = origLabel;
-            if (ok) {
-              showStatus('✅ 번역 완료, 클립보드에 복사됨. 원하는 위치에 Ctrl+V 하세요.', 'success');
-              return;
-            }
-            // 자동 복사 실패 → 사용자가 직접 누를 버튼 표시 (포커스 보장된 클릭이라 거의 항상 성공)
-            // 결과는 메모리에 보관, 폴백 textarea도 같이 채움
-            window._pendingClipHtml = clipHtml;
-            window._pendingClipText = clipText;
-            document.getElementById('body-tr').value = clipText;
-            showCopyButton();
-            showStatus('번역 완료. 아래 초록 버튼을 눌러 클립보드에 복사하세요.', 'success');
-          });
+        // 자동 복사 시도 (포커스 잃은 상태면 거의 실패함 — 그땐 수동 복사 버튼 표시)
+        copyToClipboard(clipHtml, clipText, function(ok, errMsg){
+          btn.disabled = false; btn.textContent = origLabel;
+          if (ok) {
+            showStatus('✅ 번역 완료, 클립보드에 복사됨. 회신 본문 맨 위에 Ctrl+V 하세요.', 'success');
+            return;
+          }
+          // 자동 복사 실패 → 사용자가 직접 누를 버튼 표시
+          window._pendingClipHtml = clipHtml;
+          window._pendingClipText = clipText;
+          document.getElementById('body-tr').value = clipText;
+          showCopyButton();
+          showStatus('번역 완료. 아래 초록 버튼을 눌러 클립보드에 복사하세요.', 'success');
         });
       })
       .catch(function(err){
