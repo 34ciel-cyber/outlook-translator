@@ -147,6 +147,7 @@
       </select>
       <button class="ai-btn" id="ai-btn" onclick="runAI()">AI 자동 번역 ↗</button>
       <button class="btn-small" id="manual-btn" onclick="openManualMode()" title="원문을 셀 단위로 보여드릴게요. 직접 번역만 채워넣으면 서식 그대로 유지됩니다.">✏️ 손번역 모드</button>
+      <button class="btn-small" id="selection-btn" onclick="translateSelection()" title="회신 본문에서 번역할 부분을 먼저 드래그한 다음 이 버튼을 누르세요. 번역 결과가 자동으로 클립보드에 복사됩니다.">🖱️ 선택 영역 번역</button>
     </div>
     <textarea id="body-tr" placeholder="번역문을 직접 입력하거나 위 버튼으로 AI 자동 번역 / 손번역"></textarea>
   </div>
@@ -468,6 +469,127 @@ function openManualMode(){
     document.getElementById('format-mode').checked = true;
     showStatus('✓ 원문이 준비됐어요. "현재 회신에 삽입"을 누르세요.', 'success');
   });
+}
+
+// 선택 영역 번역: 회신 본문에서 사용자가 드래그한 부분을 HTML로 가져와 번역.
+// 결과는 textarea/회신본문에 자동 삽입하지 않고 클립보드로만 복사 (사용자가 원하는 위치에 Ctrl+V).
+function translateSelection(){
+  var btn = document.getElementById('selection-btn');
+  if (btn.disabled) return;
+  btn.disabled = true;
+  var origLabel = btn.textContent;
+  btn.textContent = '⏳ 선택 영역 가져오는 중...';
+
+  Office.context.mailbox.item.getSelectedDataAsync(Office.CoercionType.Html, function(res){
+    if (res.status !== Office.AsyncResultStatus.Succeeded) {
+      btn.disabled = false; btn.textContent = origLabel;
+      showStatus('선택 영역을 가져오지 못했어요. 먼저 본문에서 번역할 부분을 드래그하세요.', 'error');
+      return;
+    }
+    var selHtml = (res.value && res.value.data) || '';
+    var plainCheck = selHtml.replace(/<[^>]+>/g,'').replace(/&nbsp;|\s/g,'').trim();
+    if (plainCheck.length < 2) {
+      btn.disabled = false; btn.textContent = origLabel;
+      showStatus('선택된 텍스트가 없어요. 본문에서 번역할 부분을 드래그한 뒤 다시 누르세요.', 'error');
+      return;
+    }
+    console.log('[TH] 선택 영역 — HTML 길이:', selHtml.length, '/ 텍스트 길이:', plainCheck.length);
+
+    // 방향 자동 감지 (전체 자동감지 안 됐을 경우 대비)
+    var dir = direction;
+    if (!dirManuallySet) {
+      var koCount = (plainCheck.match(/[가-힣]/g) || []).length;
+      var enCount = (plainCheck.match(/[a-zA-Z]/g) || []).length;
+      dir = (koCount > enCount) ? 'ko-en' : 'en-ko';
+      console.log('[TH] 선택 영역 — 자동 방향:', dir, '(한:'+koCount+', 영:'+enCount+')');
+    }
+    var srcLang = dir === 'ko-en' ? 'Korean' : 'English';
+    var tgtLang = dir === 'ko-en' ? 'English' : 'Korean';
+
+    btn.textContent = '⏳ AI 번역 중...';
+
+    // 모델/키 가져오기
+    var modelSel = document.getElementById('ai-model');
+    var modelVal = modelSel ? modelSel.value : 'claude-haiku';
+    var provider, key, modelId;
+    if (modelVal === 'openai') {
+      provider = 'openai';
+      key = localStorage.getItem('th_openai_key') || '';
+      if (!key) { btn.disabled = false; btn.textContent = origLabel; showStatus('ChatGPT API 키가 없어요. ⚙ 설정에서 입력하세요.','error'); return; }
+    } else {
+      provider = 'claude';
+      key = localStorage.getItem('th_claude_key') || '';
+      if (!key) { btn.disabled = false; btn.textContent = origLabel; showStatus('Claude API 키가 없어요. ⚙ 설정에서 입력하세요.','error'); return; }
+      modelId = (modelVal === 'claude-sonnet') ? 'claude-sonnet-4-6' : 'claude-haiku-4-5-20251001';
+    }
+
+    // 구조 보존 번역
+    translateHtmlStructurally(selHtml, provider, key, srcLang, tgtLang, modelId)
+      .then(function(result){
+        var translatedHtml = (result && result.translatedBody) || '';
+        // 클립보드용 HTML 조립 (사용자 요구 형식)
+        var mgb = "font-family:'Malgun Gothic','맑은 고딕',sans-serif;font-size:11pt;color:#4472C4;font-weight:bold;";
+        var plain = "font-family:'Malgun Gothic','맑은 고딕',sans-serif;font-size:11pt;";
+        var clipHtml =
+          '<div style="'+mgb+'">[번역문 / Translation]</div>' +
+          '<div>&nbsp;</div>' +
+          '<div style="'+plain+'">' + translatedHtml + '</div>' +
+          '<div>&nbsp;</div>' +
+          '<div>---</div>' +
+          '<div>&nbsp;</div>' +
+          '<div style="'+mgb+'">[원문 / Original]</div>' +
+          '<div>&nbsp;</div>';
+
+        // 평문 폴백 (HTML 못 받는 곳용)
+        var clipText =
+          '[번역문 / Translation]\n\n' +
+          translatedHtml.replace(/<[^>]+>/g,'').replace(/&nbsp;/g,' ').replace(/\s+\n/g,'\n').trim() +
+          '\n\n---\n\n[원문 / Original]\n';
+
+        copyToClipboard(clipHtml, clipText, function(ok, errMsg){
+          btn.disabled = false; btn.textContent = origLabel;
+          if (ok) {
+            showStatus('✅ 번역 완료, 클립보드에 복사됨. 원하는 위치에 Ctrl+V 하세요.', 'success');
+          } else {
+            // 폴백: textarea에 결과 표시해서 수동 복사 유도
+            document.getElementById('body-tr').value = clipText;
+            showStatus('번역은 됐는데 자동 복사가 안 됐어요(' + errMsg + '). 번역문 영역에서 직접 복사하세요.', 'error');
+          }
+        });
+      })
+      .catch(function(err){
+        btn.disabled = false; btn.textContent = origLabel;
+        showStatus('번역 오류: ' + (err.message || err), 'error');
+      });
+  });
+}
+
+// HTML + 평문 둘 다 클립보드에 담기 (가능하면). 비동기.
+function copyToClipboard(htmlStr, textStr, done){
+  try {
+    if (window.ClipboardItem && navigator.clipboard && navigator.clipboard.write) {
+      var item = new ClipboardItem({
+        'text/html': new Blob([htmlStr], {type:'text/html'}),
+        'text/plain': new Blob([textStr], {type:'text/plain'})
+      });
+      navigator.clipboard.write([item])
+        .then(function(){ done(true); })
+        .catch(function(e){
+          // HTML 복사 실패 → 평문이라도 시도
+          navigator.clipboard.writeText(textStr)
+            .then(function(){ done(true); })
+            .catch(function(e2){ done(false, e2.message || 'clipboard.write 거부'); });
+        });
+    } else if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(textStr)
+        .then(function(){ done(true); })
+        .catch(function(e){ done(false, e.message || '권한 없음'); });
+    } else {
+      done(false, 'Clipboard API 미지원');
+    }
+  } catch(e) {
+    done(false, e.message || '예외');
+  }
 }
 
 // 인용 영역 HTML의 첫 번째 헤더 div(From/Sent/To/Subject 포함)를 제거하고 본문만 반환.
