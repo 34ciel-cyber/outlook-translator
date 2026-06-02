@@ -525,27 +525,38 @@ function translateSelection(){
     }
 
     // 구조 보존 번역
+    console.log('[TH] 선택 영역 — raw HTML 시작 800자:', selHtml.substring(0, 800));
     translateHtmlStructurally(selHtml, provider, key, srcLang, tgtLang, modelId)
       .then(function(result){
         var translatedHtml = (result && result.translatedBody) || '';
-        // 클립보드용 HTML 조립 (사용자 요구 형식)
-        var mgb = "font-family:'Malgun Gothic','맑은 고딕',sans-serif;font-size:11pt;color:#4472C4;font-weight:bold;";
-        var plain = "font-family:'Malgun Gothic','맑은 고딕',sans-serif;font-size:11pt;";
-        var clipHtml =
-          '<div style="'+mgb+'">[번역문 / Translation]</div>' +
-          '<div>&nbsp;</div>' +
-          '<div style="'+plain+'">' + translatedHtml + '</div>' +
-          '<div>&nbsp;</div>' +
-          '<div>---</div>' +
-          '<div>&nbsp;</div>' +
-          '<div style="'+mgb+'">[원문 / Original]</div>' +
-          '<div>&nbsp;</div>';
+        console.log('[TH] 선택 영역 — 번역 후 HTML 시작 800자:', translatedHtml.substring(0, 800));
+        console.log('[TH] 선택 영역 — 번역 후 HTML 끝 400자:', translatedHtml.substring(Math.max(0, translatedHtml.length - 400)));
 
-        // 평문 폴백 (HTML 못 받는 곳용)
+        // 라벨 스타일: Outlook이 div보다 span/p 인라인 스타일을 더 잘 존중함.
+        // !important는 못 쓰니까(인라인 스타일에선 무시됨) <span style>로 텍스트만 감쌈.
+        var labelStyle = "font-family:'Malgun Gothic','맑은 고딕',sans-serif; font-size:11pt; color:#4472C4; font-weight:bold;";
+        function label(text){
+          return '<p style="margin:0; padding:0;"><span style="' + labelStyle + '">' + text + '</span></p>';
+        }
+        function spacer(){ return '<p style="margin:0; padding:0;">&nbsp;</p>'; }
+
+        var clipHtml =
+          label('[번역문 / Translation]') +
+          spacer() +
+          '<div>' + translatedHtml + '</div>' +
+          spacer() +
+          '<p style="margin:0; padding:0;">---</p>' +
+          spacer() +
+          label('[원문 / Original]') +
+          spacer();
+
+        // 평문 폴백
         var clipText =
           '[번역문 / Translation]\n\n' +
           translatedHtml.replace(/<[^>]+>/g,'').replace(/&nbsp;/g,' ').replace(/\s+\n/g,'\n').trim() +
           '\n\n---\n\n[원문 / Original]\n';
+
+        console.log('[TH] 선택 영역 — 클립보드 HTML 길이:', clipHtml.length);
 
         copyToClipboard(clipHtml, clipText, function(ok, errMsg){
           btn.disabled = false; btn.textContent = origLabel;
