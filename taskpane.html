@@ -480,6 +480,26 @@ function translateSelection(){
   var origLabel = btn.textContent;
   btn.textContent = '⏳ 선택 영역 가져오는 중...';
 
+  // 회신창에서는 subject가 객체라 getAsync로 가져와야 함. 번역 시작 전에 미리 fetch.
+  var fetchedSubject = '';
+  var subjObj = Office.context.mailbox.item.subject;
+  function afterSubject(cb){
+    if (typeof subjObj === 'string') {
+      fetchedSubject = subjObj;
+      cb();
+    } else if (subjObj && typeof subjObj.getAsync === 'function') {
+      subjObj.getAsync(function(r){
+        if (r.status === Office.AsyncResultStatus.Succeeded && typeof r.value === 'string') {
+          fetchedSubject = r.value;
+        }
+        cb();
+      });
+    } else {
+      cb();
+    }
+  }
+
+  afterSubject(function(){
   Office.context.mailbox.item.getSelectedDataAsync(Office.CoercionType.Html, function(res){
     if (res.status !== Office.AsyncResultStatus.Succeeded) {
       btn.disabled = false; btn.textContent = origLabel;
@@ -543,9 +563,8 @@ function translateSelection(){
         }
         function spacer(){ return '<p style="margin:0; padding:0;">&nbsp;</p>'; }
 
-        // 회신 메일 제목 가져오기 (헤더용)
-        var subj = '';
-        try { subj = Office.context.mailbox.item.subject || ''; } catch(e) {}
+        // 회신 메일 제목 사용 (afterSubject에서 미리 fetch한 값)
+        var subj = fetchedSubject || '';
         var cleanSubj = subj.replace(/^\s*(Re:|RE:|Fw:|FW:|Fwd:|FWD:|회신:|전달:)\s*/i, '').trim();
         var safeSubj = cleanSubj.replace(/[<>&]/g, function(c){
           return c === '<' ? '&lt;' : c === '>' ? '&gt;' : '&amp;';
@@ -598,6 +617,7 @@ function translateSelection(){
         showStatus('번역 오류: ' + (err.message || err), 'error');
       });
   });
+  }); // end afterSubject
 }
 
 // 자동 복사가 실패했을 때 사용자가 직접 누를 수 있는 큰 버튼을 표시.
