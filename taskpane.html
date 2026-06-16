@@ -535,7 +535,7 @@ function translateSelection(){
     btn.textContent = '⏳ AI 번역 중...';
 
     // 모델/키 가져오기
-    var modelSel = document.getElementById('ai-model');
+    var modelSel = document.getElementById('engine-select');
     var modelVal = modelSel ? modelSel.value : 'claude-haiku';
     var provider = engineProvider(modelVal);
     var key = localStorage.getItem(KEY_MAP[provider]) || '';
