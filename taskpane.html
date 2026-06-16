@@ -162,6 +162,8 @@
 var direction='ko-en', isComposeMode=false, dirManuallySet=false, clipboardOverride=false;
 // 서식 모드 번역 결과의 원본 HTML을 textarea 우회해서 보관 (textarea는 display용)
 var lastHtmlTranslation = null;
+// 교차 삽입용 원문/번역 쌍. HTML 교차 모드는 localStorage 대신 메모리에 보관해 용량 초과를 피함.
+var lastInterleaveData = null;
 function show(id){document.getElementById(id).classList.remove('hidden');}
 function hide(id){document.getElementById(id).classList.add('hidden');}
 
@@ -399,6 +401,7 @@ function insertDirectly(){
         if(enCount > 0) wcMsg += '영어: ' + enCount + '단어';
         showStatus('✓ 삽입 완료! ' + (wcMsg ? '(' + wcMsg + ')' : ''), 'success');
         try { localStorage.removeItem('th_interleave'); } catch(e){}
+        lastInterleaveData = null;
       } else {
         showStatus('삽입 실패: ' + (rSet.error && rSet.error.message || ''), 'error');
       }
@@ -465,6 +468,8 @@ function openManualMode(){
     console.log('[TH] 손번역 — 인용 전체:', quotedHtml.length, '/ 첫 메일만:', bodyOnly.length);
     console.log('[TH] 손번역 — bodyOnly 시작 300자:', bodyOnly.substring(0, 300));
     lastHtmlTranslation = bodyOnly;
+    lastInterleaveData = null;
+    try { localStorage.removeItem('th_interleave'); } catch(e){}
     document.getElementById('body-tr').value = bodyOnly.replace(/<[^>]+>/g,'').replace(/&nbsp;/g,' ').replace(/\s+/g,' ').trim();
     document.getElementById('format-mode').checked = true;
     showStatus('✓ 원문이 준비됐어요. "현재 회신에 삽입"을 누르세요.', 'success');
@@ -835,34 +840,13 @@ function runAI(){
   var btn=document.getElementById('ai-btn');
   btn.disabled=true; btn.textContent='번역 중...';
   showStatus('번역 중입니다...');
+  lastInterleaveData = null;
+  try { localStorage.removeItem('th_interleave'); } catch(e){}
 
   var srcLang=direction==='ko-en'?'Korean':'English';
   var tgtLang=direction==='ko-en'?'English':'Korean';
   var useHtmlMode = document.getElementById('format-mode').checked;
   var useInterleave = document.getElementById('interleave-mode').checked;
-  
-  // 교차 모드면 분할 번역 경로
-  if (useInterleave && !useHtmlMode) {
-    var chunks = splitForInterleave(body);
-    if (chunks.length === 0){
-      showStatus('원문 본문을 입력해주세요.','error');
-      btn.disabled=false; btn.textContent='AI 자동 번역 ↗';
-      return;
-    }
-    showStatus('교차 모드: ' + chunks.length + '개 단락을 번역 중...');
-    translateChunked(provider, key, chunks, srcLang, tgtLang, modelId).then(function(translations){
-      // 번역문 칸에는 번역만 (사용자가 검수할 수 있도록)
-      document.getElementById('body-tr').value = translations.join('\n\n');
-      // 교차 구성 데이터를 localStorage에 저장 (회신창에서도 접근 가능하게)
-      try { localStorage.setItem('th_interleave', JSON.stringify({originals: chunks, translations: translations})); } catch(e){}
-      showStatus('✓ 번역 완료. ' + chunks.length + '개 단락이 교차 모드로 삽입됩니다.','success');
-    }).catch(function(e){
-      showStatus('번역 오류: '+e.message,'error');
-    }).finally(function(){
-      btn.disabled=false; btn.textContent='AI 자동 번역 ↗';
-    });
-    return;
-  }
 
   // HTML 모드면 원문을 HTML로 다시 가져오기
   // - 읽기 모드: 메일 본문 = 인용 영역 이전 (extractLatestHtml)
@@ -900,7 +884,22 @@ function runAI(){
 
   bodyPromise.then(function(payload){
     var promise;
-    if (payload.mode === 'html') {
+    if (useInterleave && payload.mode === 'html') {
+      showStatus('서식+교차 모드: HTML 블록을 번역 중...');
+      promise = translateHtmlInterleaved(payload.body, provider, key, srcLang, tgtLang, modelId, subject);
+    } else if (useInterleave) {
+      var chunks = splitForInterleave(payload.body);
+      if (chunks.length === 0) throw new Error('원문 본문을 입력해주세요.');
+      showStatus('교차 모드: ' + chunks.length + '개 단락을 번역 중...');
+      promise = translateChunked(provider, key, chunks, srcLang, tgtLang, modelId).then(function(translations){
+        return {
+          translatedBody: translations.join('\n\n'),
+          displayText: translations.join('\n\n'),
+          interleaveData: {type:'text', originals: chunks, translations: translations},
+          interleaveCount: chunks.length
+        };
+      });
+    } else if (payload.mode === 'html') {
       // 서식 모드: 구조 보존 번역 (AI에게 표 자체를 보여주지 않음)
       promise = translateHtmlStructurally(payload.body, provider, key, srcLang, tgtLang, modelId, subject);
     } else if (provider === 'claude') {
@@ -911,8 +910,18 @@ function runAI(){
 
     return promise.then(function(result){
       if(result.translatedSubject) document.getElementById('subject-translated').value=result.translatedSubject;
-      document.getElementById('body-tr').value=result.translatedBody||'';
-      if (payload.mode === 'html') {
+      document.getElementById('body-tr').value=result.displayText || result.translatedBody || '';
+      if (useInterleave && result.interleaveData) {
+        lastInterleaveData = result.interleaveData;
+        if (result.interleaveData.type === 'text') {
+          try { localStorage.setItem('th_interleave', JSON.stringify(result.interleaveData)); } catch(e){}
+          lastHtmlTranslation = null;
+          showStatus('✓ 번역 완료. ' + result.interleaveCount + '개 단락이 교차 모드로 삽입됩니다.','success');
+        } else {
+          lastHtmlTranslation = result.translatedBody || '';
+          showStatus('✓ 번역 완료 (서식+교차 모드). ' + result.interleaveCount + '개 블록이 교차 삽입됩니다.','success');
+        }
+      } else if (payload.mode === 'html') {
         // 서식 모드 결과는 원본 HTML을 메모리에 보관 — textarea 우회용
         lastHtmlTranslation = result.translatedBody || '';
         // 표 구조 보존 검증
@@ -1120,6 +1129,214 @@ function translateHtmlStructurally(htmlString, provider, key, srcLang, tgtLang, 
       })
       .catch(reject);
   });
+}
+
+// 서식+교차 번역: p/div/li/table 같은 표시 블록을 원문/번역 순서로 재조립한다.
+function translateHtmlInterleaved(htmlString, provider, key, srcLang, tgtLang, modelId, subject){
+  return new Promise(function(resolve, reject){
+    var parser = new DOMParser();
+    var docu = parser.parseFromString('<!DOCTYPE html><html><body>'+htmlString+'</body></html>', 'text/html');
+    var root = docu.body;
+    var sourceBlocks = collectHtmlInterleaveBlocks(root);
+
+    if (sourceBlocks.length === 0) {
+      resolve({
+        translatedSubject: subject,
+        translatedBody: htmlString,
+        displayText: htmlString.replace(/<[^>]+>/g,'').replace(/&nbsp;/g,' ').trim(),
+        interleaveData: {type:'html', blocks: []},
+        interleaveCount: 0
+      });
+      return;
+    }
+
+    console.log('[TH] 서식+교차 — 블록 수:', sourceBlocks.length);
+    var items = sourceBlocks.map(function(node){
+      return {
+        originalHtml: serializeInterleaveBlock(node),
+        translatedNode: cloneBlockForInterleave(node)
+      };
+    });
+
+    var textNodes = [];
+    items.forEach(function(item){
+      collectTranslatableTextNodes(item.translatedNode, textNodes);
+    });
+
+    if (textNodes.length === 0) {
+      var unchangedBlocks = items.map(function(item){
+        return {originalHtml: item.originalHtml, translatedHtml: item.originalHtml};
+      });
+      resolve({
+        translatedSubject: subject,
+        translatedBody: buildInterleavedHtmlFromBlocks(unchangedBlocks),
+        displayText: '',
+        interleaveData: {type:'html', blocks: unchangedBlocks},
+        interleaveCount: unchangedBlocks.length
+      });
+      return;
+    }
+
+    var allChunks = [subject || '(none)'].concat(textNodes.map(function(n){ return n.nodeValue.trim(); }));
+    translateChunked(provider, key, allChunks, srcLang, tgtLang, modelId)
+      .then(function(translations){
+        var translatedSubject = (translations[0] && translations[0].trim()) || subject;
+        textNodes.forEach(function(n, i){
+          var tr = translations[i+1];
+          if (tr != null && tr !== '') {
+            var orig = n.nodeValue;
+            var leading = (orig.match(/^\s+/) || [''])[0];
+            var trailing = (orig.match(/\s+$/) || [''])[0];
+            n.nodeValue = leading + String(tr).trim() + trailing;
+          }
+        });
+
+        var blocks = items.map(function(item){
+          return {
+            originalHtml: item.originalHtml,
+            translatedHtml: item.translatedNode.outerHTML || ''
+          };
+        });
+        resolve({
+          translatedSubject: translatedSubject,
+          translatedBody: buildInterleavedHtmlFromBlocks(blocks),
+          displayText: blocks.map(function(block){ return htmlToPlainText(block.translatedHtml); }).filter(Boolean).join('\n\n'),
+          interleaveData: {type:'html', blocks: blocks},
+          interleaveCount: blocks.length
+        });
+      })
+      .catch(reject);
+  });
+}
+
+function collectTranslatableTextNodes(root, out){
+  var docu = root.ownerDocument;
+  var walker = docu.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode: function(n){
+      var parentTag = n.parentNode && n.parentNode.tagName;
+      if (parentTag === 'SCRIPT' || parentTag === 'STYLE') return NodeFilter.FILTER_REJECT;
+      if (!n.nodeValue || !n.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;
+    }
+  }, false);
+  var node;
+  while ((node = walker.nextNode())) out.push(node);
+}
+
+function collectHtmlInterleaveBlocks(root){
+  var blocks = [];
+  function tagOf(node){ return (node.tagName || '').toUpperCase(); }
+  function hasVisibleContent(node){
+    if (!node) return false;
+    var text = (node.textContent || '').replace(/\u00a0/g, ' ').replace(/\s+/g, '').trim();
+    if (text) return true;
+    return !!(node.querySelector && node.querySelector('img, svg'));
+  }
+  function isBlockContainer(tag){
+    return /^(DIV|SECTION|ARTICLE|BLOCKQUOTE|UL|OL|TABLE|P|LI|H[1-6])$/.test(tag);
+  }
+  function hasVisibleBlockChild(node){
+    for (var child = node.firstElementChild; child; child = child.nextElementSibling) {
+      if (hasVisibleContent(child) && isBlockContainer(tagOf(child))) return true;
+    }
+    return false;
+  }
+  function add(node){
+    if (hasVisibleContent(node)) blocks.push(node);
+  }
+  function visit(node){
+    if (!node) return;
+    if (node.nodeType === 3) {
+      if (node.nodeValue && node.nodeValue.trim()) {
+        var div = root.ownerDocument.createElement('div');
+        div.textContent = node.nodeValue.trim();
+        blocks.push(div);
+      }
+      return;
+    }
+    if (node.nodeType !== 1) return;
+    var tag = tagOf(node);
+    if (tag === 'SCRIPT' || tag === 'STYLE') return;
+    if (!hasVisibleContent(node)) return;
+
+    if (tag === 'TABLE' || tag === 'P' || tag === 'LI' || /^H[1-6]$/.test(tag)) {
+      add(node);
+      return;
+    }
+    if (tag === 'UL' || tag === 'OL' || tag === 'BODY') {
+      Array.prototype.forEach.call(node.childNodes, visit);
+      return;
+    }
+    if (tag === 'DIV' || tag === 'SECTION' || tag === 'ARTICLE' || tag === 'BLOCKQUOTE') {
+      if (!hasVisibleBlockChild(node)) {
+        add(node);
+      } else {
+        Array.prototype.forEach.call(node.childNodes, visit);
+      }
+      return;
+    }
+    if (hasVisibleBlockChild(node)) {
+      Array.prototype.forEach.call(node.childNodes, visit);
+    } else {
+      add(node);
+    }
+  }
+  Array.prototype.forEach.call(root.childNodes, visit);
+  return blocks;
+}
+
+function cloneBlockForInterleave(node){
+  var clone = node.cloneNode(true);
+  if (node.tagName && node.tagName.toUpperCase() === 'LI' && node.parentNode) {
+    var parentTag = (node.parentNode.tagName || '').toUpperCase();
+    if (parentTag === 'UL' || parentTag === 'OL') {
+      var listClone = node.parentNode.cloneNode(false);
+      if (parentTag === 'OL') {
+        var ordinal = getListItemOrdinal(node);
+        if (ordinal > 0) listClone.setAttribute('start', String(ordinal));
+      }
+      listClone.appendChild(clone);
+      return listClone;
+    }
+  }
+  return clone;
+}
+
+function getListItemOrdinal(li){
+  var parent = li.parentNode;
+  if (!parent) return 1;
+  var start = parseInt(parent.getAttribute('start'), 10);
+  var ordinal = isNaN(start) ? 1 : start;
+  for (var child = parent.firstElementChild; child; child = child.nextElementSibling) {
+    if ((child.tagName || '').toUpperCase() !== 'LI') continue;
+    var explicit = parseInt(child.getAttribute('value'), 10);
+    if (!isNaN(explicit)) ordinal = explicit;
+    if (child === li) return ordinal;
+    ordinal++;
+  }
+  return ordinal;
+}
+
+function serializeInterleaveBlock(node){
+  var clone = cloneBlockForInterleave(node);
+  return clone.outerHTML || '';
+}
+
+function buildInterleavedHtmlFromBlocks(blocks){
+  var parts = [];
+  blocks.forEach(function(block){
+    if (block.originalHtml) parts.push(block.originalHtml);
+    if (block.translatedHtml) parts.push(block.translatedHtml);
+    parts.push('<div>&nbsp;</div>');
+  });
+  return parts.join('');
+}
+
+function htmlToPlainText(html){
+  if (!html) return '';
+  var parser = new DOMParser();
+  var docu = parser.parseFromString('<!DOCTYPE html><html><body>'+html+'</body></html>', 'text/html');
+  return (docu.body.textContent || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 function trClaude(key,subject,body,srcLang,tgtLang,mode,modelId){
@@ -1430,7 +1647,10 @@ function buildHtml(currentHtml,subjectLine,bodyTr,bodyOrig){
   
   var interleaveData = null;
   if (isInterleave) {
-    try { var ild = localStorage.getItem('th_interleave'); if(ild) interleaveData = JSON.parse(ild); } catch(e){}
+    interleaveData = lastInterleaveData;
+    if (!interleaveData) {
+      try { var ild = localStorage.getItem('th_interleave'); if(ild) interleaveData = JSON.parse(ild); } catch(e){}
+    }
   }
   if (isInterleave && interleaveData) {
     // 교차 모드: 헤더 한 번 + 원문/번역문 짝지어 배치
@@ -1438,20 +1658,24 @@ function buildHtml(currentHtml,subjectLine,bodyTr,bodyOrig){
     var parts = ['<div>&nbsp;</div>'];
     parts.push('<div style="'+mgb+'">[번역문 / Translation]</div>');
     parts.push('<div>&nbsp;</div>');
-    for (var i = 0; i < Math.max(data.originals.length, data.translations.length); i++) {
-      var orig = data.originals[i] || '';
-      var trans = data.translations[i] || '';
-      parts.push('<div style="'+plain+'">' + esc(orig) + '</div>');
-      parts.push('<div style="'+plain+'">' + esc(trans) + '</div>');
-      parts.push('<div>&nbsp;</div>');
+    if (data.type === 'html' && data.blocks) {
+      for (var h = 0; h < data.blocks.length; h++) {
+        parts.push(data.blocks[h].originalHtml || '');
+        parts.push(data.blocks[h].translatedHtml || '');
+        parts.push('<div>&nbsp;</div>');
+      }
+    } else {
+      for (var i = 0; i < Math.max(data.originals.length, data.translations.length); i++) {
+        var orig = data.originals[i] || '';
+        var trans = data.translations[i] || '';
+        parts.push('<div style="'+plain+'">' + esc(orig) + '</div>');
+        parts.push('<div style="'+plain+'">' + esc(trans) + '</div>');
+        parts.push('<div>&nbsp;</div>');
+      }
     }
     parts.push('<div>---</div>');
     parts.push('<div>&nbsp;</div>');
     parts.push('<div style="'+mgb+'">[원문 / Original]</div>');
-    parts.push('<div>&nbsp;</div>');
-    for (var i = 0; i < data.originals.length; i++) {
-      parts.push('<div style="'+plain+'">' + esc(data.originals[i] || '') + '</div>');
-    }
     parts.push('<div>&nbsp;</div>');
     translationSection = parts.join('');
   } else {
