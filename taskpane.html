@@ -344,6 +344,177 @@ function extractQuotedBody(fullText){
     .join('\n').trim();
 }
 
+function sourceLangCodeFromName(srcLang){
+  return srcLang === 'Korean' ? 'ko' : 'en';
+}
+
+function sourceLangLabel(srcLang){
+  return srcLang === 'Korean' ? '한국어' : '영어';
+}
+
+function looksLikeWrongSourceLanguage(text, srcLang){
+  var lang = detectLanguage(text || '');
+  if (!lang) return false;
+  return lang !== sourceLangCodeFromName(srcLang);
+}
+
+function normalizeTextForMatch(text){
+  return (text || '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/\u00a0/g, ' ')
+    .replace(/https?:\/\/\S+/gi, ' ')
+    .toLowerCase()
+    .replace(/[^a-z0-9\u3131-\u3163\uac00-\ud7a3]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function getMatchTokens(text){
+  var norm = normalizeTextForMatch(text);
+  if (!norm) return [];
+  var raw = norm.split(' ');
+  var stop = {
+    from:1, sent:1, to:1, cc:1, bcc:1, subject:1, re:1, fw:1, fwd:1,
+    the:1, and:1, for:1, with:1, this:1, that:1, you:1, your:1, please:1,
+    보낸:1, 사람:1, 날짜:1, 받는:1, 제목:1, 참조:1
+  };
+  var seen = {};
+  var tokens = [];
+  raw.forEach(function(tok){
+    if (!tok || tok.length < 2 || stop[tok]) return;
+    if (!seen[tok]) {
+      seen[tok] = true;
+      tokens.push(tok);
+    }
+  });
+  return tokens;
+}
+
+function scoreTextMatch(referenceText, candidateText){
+  var refTokens = getMatchTokens(referenceText);
+  if (refTokens.length === 0) return 0;
+  var candNorm = ' ' + normalizeTextForMatch(candidateText) + ' ';
+  if (!candNorm.trim()) return 0;
+  var hits = 0;
+  refTokens.forEach(function(tok){
+    if (candNorm.indexOf(' ' + tok + ' ') >= 0) hits++;
+  });
+  var score = hits / refTokens.length;
+  var refNorm = normalizeTextForMatch(referenceText);
+  if (refNorm.length >= 40) {
+    var startSnippet = refNorm.substring(0, Math.min(120, refNorm.length)).trim();
+    var endSnippet = refNorm.substring(Math.max(0, refNorm.length - 120)).trim();
+    if (startSnippet && candNorm.indexOf(startSnippet) >= 0) score += 0.2;
+    if (endSnippet && candNorm.indexOf(endSnippet) >= 0) score += 0.15;
+  }
+  return Math.min(1, score);
+}
+
+function getHeaderTopNodes(root){
+  var HEADER_RE = /^(From|Sent|To|Cc|Bcc|Subject|보낸\s*사람|보낸\s*날짜|받는\s*사람|참조|숨은\s*참조|제목|발신)\s*[:：]/i;
+  var blocks = root.querySelectorAll('p, div, table');
+  var tops = [];
+  for (var i = 0; i < blocks.length; i++) {
+    var text = (blocks[i].textContent || '').replace(/\u00a0/g, ' ').trim();
+    if (!text || !HEADER_RE.test(text)) continue;
+    var top = blocks[i];
+    while (top.parentNode && top.parentNode !== root) top = top.parentNode;
+    if (top && top.parentNode === root && tops.indexOf(top) < 0) tops.push(top);
+  }
+  return tops;
+}
+
+function extractQuotedMessageCandidates(quotedHtml){
+  var candidates = [];
+  if (!quotedHtml) return candidates;
+  try {
+    var parser = new DOMParser();
+    var doc = parser.parseFromString(
+      '<!DOCTYPE html><html><body><div id="__root">' + quotedHtml + '</div></body></html>',
+      'text/html'
+    );
+    var root = doc.getElementById('__root');
+    if (!root) return candidates;
+    var tops = getHeaderTopNodes(root);
+    for (var i = 0; i < tops.length; i++) {
+      var stop = tops[i + 1] || null;
+      var htmlParts = [];
+      var cur = tops[i];
+      while (cur && cur !== stop) {
+        htmlParts.push(cur.outerHTML || cur.textContent || '');
+        cur = cur.nextSibling;
+      }
+      var segment = htmlParts.join('');
+      var bodyOnly = keepUntilNextHeader(removeFirstHeaderDiv(segment));
+      if (htmlToPlainText(bodyOnly).length >= 20) candidates.push(bodyOnly);
+    }
+  } catch(e) {
+    console.log('[TH] 후보 메일 분리 실패:', e.message);
+  }
+  return candidates;
+}
+
+function collectMatchingHtmlContainers(quotedHtml){
+  var candidates = [];
+  if (!quotedHtml) return candidates;
+  try {
+    var parser = new DOMParser();
+    var doc = parser.parseFromString(
+      '<!DOCTYPE html><html><body><div id="__root">' + quotedHtml + '</div></body></html>',
+      'text/html'
+    );
+    var root = doc.getElementById('__root');
+    if (!root) return candidates;
+    var nodes = root.querySelectorAll('div, p, table, blockquote');
+    for (var i = 0; i < nodes.length; i++) {
+      var txt = (nodes[i].textContent || '').replace(/\u00a0/g, ' ').trim();
+      if (txt.length >= 40) candidates.push(nodes[i].outerHTML || '');
+    }
+  } catch(e) {
+    console.log('[TH] 후보 컨테이너 수집 실패:', e.message);
+  }
+  return candidates;
+}
+
+function alignQuotedHtmlWithReference(quotedHtml, extractedHtml, referenceText, srcLang){
+  var currentText = htmlToPlainText(extractedHtml);
+  var currentScore = scoreTextMatch(referenceText, currentText);
+  var currentWrongLang = looksLikeWrongSourceLanguage(currentText, srcLang);
+  console.log('[TH] HTML 원문 일치 점수:', currentScore.toFixed(2), '/ 언어 불일치:', currentWrongLang);
+
+  if (currentScore >= 0.35 && !currentWrongLang) {
+    return {mode:'html', body: extractedHtml};
+  }
+
+  var candidates = extractQuotedMessageCandidates(quotedHtml).concat(collectMatchingHtmlContainers(quotedHtml));
+  var best = {score: currentScore, html: extractedHtml, text: currentText};
+  candidates.forEach(function(candidateHtml){
+    var txt = htmlToPlainText(candidateHtml);
+    if (looksLikeWrongSourceLanguage(txt, srcLang)) return;
+    var score = scoreTextMatch(referenceText, txt);
+    if (score > best.score) {
+      best = {score: score, html: candidateHtml, text: txt};
+    }
+  });
+
+  if (best.html !== extractedHtml && best.score >= Math.max(0.18, currentScore + 0.10)) {
+    console.log('[TH] HTML 원문 후보 교체:', currentScore.toFixed(2), '→', best.score.toFixed(2));
+    return {mode:'html', body: best.html};
+  }
+
+  if (currentWrongLang || currentScore < 0.12) {
+    console.warn('[TH] HTML 원문 확인 실패 — 화면 원문 텍스트로 폴백');
+    return {
+      mode:'text',
+      body: referenceText,
+      warning: '서식 원문이 화면의 원문과 달라 보여 일반 텍스트로 안전하게 번역합니다.'
+    };
+  }
+
+  return {mode:'html', body: extractedHtml};
+}
+
 // buildHtml이 참조하는 임시 상태 (insertDirectly 안에서만 set)
 var _currentPending = null;
 function getPendingForBuild(){ return _currentPending; }
@@ -521,16 +692,30 @@ function translateSelection(){
     }
     console.log('[TH] 선택 영역 — HTML 길이:', selHtml.length, '/ 텍스트 길이:', plainCheck.length);
 
-    // 방향 자동 감지 (전체 자동감지 안 됐을 경우 대비)
+    // 방향 자동 감지. 원문칸이 이미 채워져 있으면 그 방향을 우선 신뢰한다.
+    // Office가 긴 스레드에서 엉뚱한 선택 HTML을 돌려주는 경우, 선택값만 보고 방향을 바꾸면 사고가 난다.
     var dir = direction;
     if (!dirManuallySet) {
-      var koCount = (plainCheck.match(/[가-힣]/g) || []).length;
-      var enCount = (plainCheck.match(/[a-zA-Z]/g) || []).length;
-      dir = (koCount > enCount) ? 'ko-en' : 'en-ko';
-      console.log('[TH] 선택 영역 — 자동 방향:', dir, '(한:'+koCount+', 영:'+enCount+')');
+      var refText = (document.getElementById('body-orig').value || '').trim();
+      var refLang = detectLanguage(refText);
+      if (refLang) {
+        dir = (refLang === 'ko') ? 'ko-en' : 'en-ko';
+        console.log('[TH] 선택 영역 — 원문칸 기준 방향:', dir);
+      } else {
+        var koCount = (plainCheck.match(/[가-힣]/g) || []).length;
+        var enCount = (plainCheck.match(/[a-zA-Z]/g) || []).length;
+        dir = (koCount > enCount) ? 'ko-en' : 'en-ko';
+        console.log('[TH] 선택 영역 — 자동 방향:', dir, '(한:'+koCount+', 영:'+enCount+')');
+      }
     }
     var srcLang = dir === 'ko-en' ? 'Korean' : 'English';
     var tgtLang = dir === 'ko-en' ? 'English' : 'Korean';
+    if (looksLikeWrongSourceLanguage(plainCheck, srcLang)) {
+      btn.disabled = false; btn.textContent = origLabel;
+      showStatus('선택된 내용이 ' + sourceLangLabel(srcLang) + ' 원문처럼 보이지 않아 중단했어요. 긴 스레드에서는 정확한 본문을 다시 드래그하거나 원문칸/번역 방향을 확인해주세요.', 'error');
+      console.warn('[TH] 선택 영역 언어 불일치 — 중단. 기대:', srcLang, '/ 선택 시작:', plainCheck.substring(0, 120));
+      return;
+    }
 
     btn.textContent = '⏳ AI 번역 중...';
 
@@ -857,12 +1042,20 @@ function runAI(){
       Office.context.mailbox.item.body.getAsync(Office.CoercionType.Html,function(rH){
         if (rH.status === Office.AsyncResultStatus.Succeeded) {
           var fullHtml = rH.value || '';
-          var html = isComposeMode ? extractQuotedHtml(fullHtml) : extractLatestHtml(fullHtml);
+          var quotedHtml = isComposeMode ? extractQuotedHtml(fullHtml) : '';
+          var html = isComposeMode ? quotedHtml : extractLatestHtml(fullHtml);
           // 회신창에서는 인용 영역 맨 앞의 From/Sent/Subject 헤더 div를 제거하고 본문만 번역기로 보냄
           if (isComposeMode) {
             var beforeLen = html.length;
             html = removeFirstHeaderDiv(html);
             html = keepUntilNextHeader(html);
+            var aligned = alignQuotedHtmlWithReference(quotedHtml, html, body, srcLang);
+            if (aligned.warning) showStatus(aligned.warning);
+            if (aligned.mode === 'text') {
+              resolve({mode:'text', body:aligned.body});
+              return;
+            }
+            html = aligned.body;
             console.log('[TH] AI 서식 — 인용 전체:', beforeLen, '/ 첫 메일만:', html.length);
             console.log('[TH] AI 서식 — 본문 시작 300자:', html.substring(0, 300));
           }
