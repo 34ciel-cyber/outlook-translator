@@ -9,6 +9,7 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Segoe UI', sans-serif; font-size: 13px; background: #fff; color: #1f1f1f; padding: 12px; }
     .format-tag { display: flex; align-items: center; gap: 5px; font-size: 11px; color: #4472C4; background: rgba(68,114,196,0.08); border: 0.5px solid #4472C4; border-radius: 20px; padding: 3px 9px; margin-bottom: 12px; width: fit-content; }
+    .version-tag { font-size: 10px; color: #999; margin: -6px 0 10px; }
     .dot { width: 7px; height: 7px; border-radius: 50%; background: #4472C4; }
     .banner { font-size: 11px; padding: 7px 10px; border-radius: 5px; margin-bottom: 12px; line-height: 1.6; }
     .banner-read { border-left: 3px solid #4472C4; background: rgba(68,114,196,0.06); }
@@ -68,6 +69,7 @@
 </head>
 <body>
 <div class="format-tag"><span class="dot"></span>맑은 고딕 11pt · #4472C4</div>
+<div class="version-tag" id="version-tag">loading...</div>
 
 <div id="banner-read" class="banner banner-read hidden">
   <b>⚠ 받은 메일 모드에서는 사용할 수 없어요.</b><br>
@@ -124,6 +126,7 @@
     <div id="img-warning" class="img-warning hidden">⚠️ 이 메일에 이미지가 포함되어 있어요. 이미지는 자동 처리되지 않으니, 필요하면 텍스트만 선택해 복사한 뒤 [📋 클립보드에서 가져오기]를 눌러주세요.</div>
     <div class="reload-row" style="gap:6px;">
       <button class="btn-small" onclick="pasteFromClipboard()" style="background:#4472C4;color:#fff;border-color:#4472C4;">📋 클립보드에서 가져오기</button>
+      <button class="btn-small" onclick="pasteHtmlFromClipboard()" title="메일에서 원하는 본문을 드래그한 뒤 Ctrl+C로 복사하고 누르세요. 가능한 경우 서식 포함 HTML을 가져옵니다.">📋 서식 포함 가져오기</button>
     </div>
     <label class="format-toggle">
       <input type="checkbox" id="format-mode" />
@@ -159,12 +162,13 @@
 <div id="compose-status" class="status hidden"></div>
 
 <script>
-var APP_VERSION = '2026-06-22-safe-selection-confirm-v2';
+var APP_VERSION = '2026-06-22-fast-prompt-v3';
 var direction='ko-en', isComposeMode=false, dirManuallySet=false, clipboardOverride=false;
 // 서식 모드 번역 결과의 원본 HTML을 textarea 우회해서 보관 (textarea는 display용)
 var lastHtmlTranslation = null;
 // 교차 삽입용 원문/번역 쌍. HTML 교차 모드는 localStorage 대신 메모리에 보관해 용량 초과를 피함.
 var lastInterleaveData = null;
+var clipboardHtmlOverride = null;
 function show(id){document.getElementById(id).classList.remove('hidden');}
 function hide(id){document.getElementById(id).classList.add('hidden');}
 
@@ -222,6 +226,7 @@ function onOrigChange(){
 function clearPendingTranslationState(){
   lastHtmlTranslation = null;
   lastInterleaveData = null;
+  clipboardHtmlOverride = null;
   try { localStorage.removeItem('th_interleave'); } catch(e){}
 }
 
@@ -254,6 +259,8 @@ function updateWordCount(text){
 
 Office.onReady(function(info){
   console.log('[TH] Translation Helper version:', APP_VERSION);
+  var versionTag = document.getElementById('version-tag');
+  if (versionTag) versionTag.textContent = 'v ' + APP_VERSION;
   loadAllKeys();
   if(info.host!==Office.HostType.Outlook) return;
   var item=Office.context.mailbox.item;
@@ -587,6 +594,7 @@ function insertDirectly(){
       subjectLine: subjectLine,
       bodyTr: useStoredHtml ? bodyTr : stripTH(bodyTr),
       bodyOrig: stripTH(bodyOrig),
+      sourceHtml: useStoredHtml ? clipboardHtmlOverride : null,
       isHtml: useStoredHtml,
       isInterleave: isInterleave,
       origOnly: origOnlyMode,
@@ -612,8 +620,7 @@ function insertDirectly(){
         if(koCount > 0 && enCount > 0) wcMsg += ' · ';
         if(enCount > 0) wcMsg += '영어: ' + enCount + '단어';
         showStatus('✓ 삽입 완료! ' + (wcMsg ? '(' + wcMsg + ')' : ''), 'success');
-        try { localStorage.removeItem('th_interleave'); } catch(e){}
-        lastInterleaveData = null;
+        clearPendingTranslationState();
       } else {
         showStatus('삽입 실패: ' + (rSet.error && rSet.error.message || ''), 'error');
       }
@@ -651,6 +658,73 @@ function pasteFromClipboard(){
   } catch(e) {
     console.log('[TH] clipboard catch error:', e.message);
     showStatus('클립보드 접근 실패. 원문 칸을 클릭 후 Ctrl+V로 직접 붙여넣어 주세요.', 'error');
+  }
+}
+
+function normalizeClipboardHtml(html){
+  if (!html) return '';
+  try {
+    var parser = new DOMParser();
+    var doc = parser.parseFromString(html, 'text/html');
+    if (doc && doc.body && doc.body.innerHTML) {
+      return doc.body.innerHTML
+        .replace(/<!--StartFragment-->/gi, '')
+        .replace(/<!--EndFragment-->/gi, '')
+        .trim();
+    }
+  } catch(e) {}
+  return html
+    .replace(/^[\s\S]*?<!--StartFragment-->/i, '')
+    .replace(/<!--EndFragment-->[\s\S]*$/i, '')
+    .trim();
+}
+
+function pasteHtmlFromClipboard(){
+  console.log('[TH] pasteHtmlFromClipboard called');
+  try {
+    if (!navigator.clipboard || !navigator.clipboard.read) {
+      showStatus('서식 포함 클립보드를 읽을 수 없어요. 메일 본문을 Ctrl+C 후 일반 [클립보드에서 가져오기]를 사용하거나, 선택 영역 번역을 시도해주세요.', 'error');
+      return;
+    }
+    navigator.clipboard.read().then(function(items){
+      var htmlPromise = null;
+      for (var i = 0; i < items.length; i++) {
+        var types = items[i].types || [];
+        if (types.indexOf('text/html') >= 0) {
+          htmlPromise = items[i].getType('text/html').then(function(blob){ return blob.text(); });
+          break;
+        }
+      }
+      if (!htmlPromise) {
+        showStatus('클립보드에 서식 HTML이 없어요. Outlook에서 원하는 본문을 드래그한 뒤 Ctrl+C로 복사하고 다시 눌러주세요.', 'error');
+        return;
+      }
+      htmlPromise.then(function(rawHtml){
+        var html = normalizeClipboardHtml(rawHtml || '');
+        var plain = htmlToPlainText(html);
+        if (!plain || plain.length < 2) {
+          showStatus('클립보드의 서식 HTML에서 텍스트를 찾지 못했어요.', 'error');
+          return;
+        }
+        clipboardOverride = true;
+        var ta = document.getElementById('body-orig');
+        ta.value = plain;
+        ta.dispatchEvent(new Event('input', { bubbles: true }));
+        clipboardHtmlOverride = html;
+        document.getElementById('format-mode').checked = true;
+        setSrcBadge('서식 클립보드', true);
+        autoDetectAndSetDir(plain);
+        updateWordCount(plain);
+        showStatus('✓ 서식 포함 클립보드에서 ' + plain.length + '자 가져옴. 이제 AI 자동 번역을 누르세요.', 'success');
+        console.log('[TH] 서식 클립보드 HTML 길이:', html.length, '/ 텍스트 길이:', plain.length);
+      }).catch(function(e){
+        showStatus('서식 HTML 읽기 실패: ' + (e.message || e), 'error');
+      });
+    }).catch(function(e){
+      showStatus('클립보드 접근 실패: ' + (e.message || e) + '. Outlook에서 본문을 Ctrl+C로 복사한 직후 다시 눌러주세요.', 'error');
+    });
+  } catch(e) {
+    showStatus('서식 포함 클립보드 읽기 실패: ' + (e.message || e), 'error');
   }
 }
 
@@ -1075,7 +1149,9 @@ function runAI(){
   var btn=document.getElementById('ai-btn');
   btn.disabled=true; btn.textContent='번역 중...';
   showStatus('번역 중입니다...');
+  var htmlOverrideForRun = clipboardHtmlOverride;
   clearPendingTranslationState();
+  clipboardHtmlOverride = htmlOverrideForRun;
 
   var srcLang=direction==='ko-en'?'Korean':'English';
   var tgtLang=direction==='ko-en'?'English':'Korean';
@@ -1086,7 +1162,10 @@ function runAI(){
   // - 읽기 모드: 메일 본문 = 인용 영역 이전 (extractLatestHtml)
   // - 회신창(compose): 원본 메일 = 인용 영역 이후 (extractQuotedHtml)
   var bodyPromise;
-  if (useHtmlMode) {
+  if (useHtmlMode && clipboardHtmlOverride) {
+    console.log('[TH] 서식 클립보드 HTML 사용:', clipboardHtmlOverride.length);
+    bodyPromise = Promise.resolve({mode:'html', body:clipboardHtmlOverride, source:'clipboard-html'});
+  } else if (useHtmlMode) {
     bodyPromise = new Promise(function(resolve){
       Office.context.mailbox.item.body.getAsync(Office.CoercionType.Html,function(rH){
         if (rH.status === Office.AsyncResultStatus.Succeeded) {
@@ -1583,23 +1662,16 @@ function htmlToPlainText(html){
 
 function getTranslationStyleRules(srcLang, tgtLang){
   var common =
-    'STYLE RULES (critical):\n' +
-    '- Translate the meaning, not the source-language word order. Do NOT produce word-for-word or machine-like translations.\n' +
-    '- Keep the tone professional, clear, and natural for corporate email and collaboration tools.\n' +
-    '- Preserve names, company/team names, product names, URLs, email addresses, numbers, and dates exactly unless they are already conventionally translated.\n' +
-    '- If the source is awkward or elliptical, make the translation read like a polished message while preserving the intended meaning.\n';
+    'STYLE: Translate meaning naturally, not word order. Use polished corporate email tone. ' +
+    'Preserve names, teams, products, URLs, emails, numbers, and dates.\n';
   if (tgtLang === 'English') {
     return common +
-      '- For Korean to English, rewrite Korean sentence structure into fluent business English.\n' +
-      '- Make requests polite and natural: use phrases like "Could you please...", "We would like to request...", or "Please let me know if...".\n' +
-      '- Convert Korean email closings naturally: "OO 드림/올림" should become "Best regards, OO" or a similar standard English closing, not "OO sincerely".\n' +
-      '- Avoid awkward literal phrases such as "separately manage is being" or "please work on that will do".\n\n';
+      'KO→EN: rewrite into fluent business English. Make requests polite and natural. ' +
+      'Render Korean closings like "OO 드림/올림" as "Best regards, OO". Avoid literal Korean syntax.\n\n';
   }
   if (tgtLang === 'Korean') {
     return common +
-      '- For English to Korean, use natural Korean business email style with polite endings such as "-드립니다", "-부탁드립니다", and "-확인 부탁드립니다" where appropriate.\n' +
-      '- Do not preserve English sentence structure if it sounds unnatural in Korean. Reorder the sentence so it reads like native Korean.\n' +
-      '- Translate corporate requests and status updates into concise, respectful Korean rather than literal English calques.\n\n';
+      'EN→KO: use natural, respectful Korean business email style. Reorder sentences when needed; avoid English calques.\n\n';
   }
   return common + '\n';
 }
@@ -1734,17 +1806,19 @@ function splitForInterleave(text){
 // 분할 번역 (서식 모드 + 교차 모드 공통)
 // 긴 메일은 한 번에 보내면 max_tokens에 막혀 응답이 잘림.
 // 따라서 chunk를 BATCH_SIZE 단위로 쪼개 여러 번 호출 후 결과 합침.
-var TRANSLATE_BATCH_SIZE = 80;          // 한 호출당 최대 텍스트 노드 수
+var TRANSLATE_BATCH_SIZE_CLAUDE = 120;  // Claude는 출력 여유가 있어 호출 수를 줄임
+var TRANSLATE_BATCH_SIZE_OPENAI = 80;   // OpenAI는 출력 한도 때문에 보수적으로 유지
 var TRANSLATE_MAX_TOKENS_CLAUDE = 32000; // Claude 응답 한도
 var TRANSLATE_MAX_TOKENS_OPENAI = 16000; // gpt-4o-mini 응답 한도(16384가 상한)
 
 function translateChunked(provider, key, chunks, srcLang, tgtLang, modelId){
   // 배치로 분할
   var batches = [];
-  for (var i = 0; i < chunks.length; i += TRANSLATE_BATCH_SIZE) {
-    batches.push(chunks.slice(i, i + TRANSLATE_BATCH_SIZE));
+  var batchSize = provider === 'claude' ? TRANSLATE_BATCH_SIZE_CLAUDE : TRANSLATE_BATCH_SIZE_OPENAI;
+  for (var i = 0; i < chunks.length; i += batchSize) {
+    batches.push(chunks.slice(i, i + batchSize));
   }
-  console.log('[TH] 분할 번역: 총', chunks.length, '청크 →', batches.length, '배치');
+  console.log('[TH] 분할 번역: 총', chunks.length, '청크 →', batches.length, '배치 / batchSize:', batchSize);
 
   // 배치를 순차 호출 (병렬은 rate limit 위험)
   var allTranslations = [];
@@ -1961,7 +2035,7 @@ function buildHtml(currentHtml,subjectLine,bodyTr,bodyOrig){
         '<div style="'+mgb+'">[원문 / Original]</div>'+
         '<div>&nbsp;</div>';
       if (isPartialOrig) {
-        var bodyOrigHtml2 = esc(bodyOrig);
+        var bodyOrigHtml2 = (pending && pending.sourceHtml) ? pending.sourceHtml : esc(bodyOrig);
         translationSection += '<div style="'+plain+'">'+bodyOrigHtml2+'</div><div>&nbsp;</div>';
       }
     } else {
@@ -1979,7 +2053,7 @@ function buildHtml(currentHtml,subjectLine,bodyTr,bodyOrig){
         '<div>&nbsp;</div>';
       // 클립보드로 일부만 가져온 경우에만 bodyOrig 명시 삽입
       if (isPartialOrig) {
-        var bodyOrigHtml = isHtml ? bodyOrig : esc(bodyOrig);
+        var bodyOrigHtml = (pending && pending.sourceHtml) ? pending.sourceHtml : (isHtml ? bodyOrig : esc(bodyOrig));
         translationSection += '<div style="'+plain+'">'+bodyOrigHtml+'</div><div>&nbsp;</div>';
       }
     }
