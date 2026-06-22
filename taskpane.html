@@ -213,8 +213,15 @@ function autoDetectAndSetDir(text){
 
 function onOrigChange(){
   var text = document.getElementById('body-orig').value;
+  clearPendingTranslationState();
   autoDetectAndSetDir(text);
   updateWordCount(text);
+}
+
+function clearPendingTranslationState(){
+  lastHtmlTranslation = null;
+  lastInterleaveData = null;
+  try { localStorage.removeItem('th_interleave'); } catch(e){}
 }
 
 function updateWordCount(text){
@@ -281,6 +288,10 @@ Office.onReady(function(info){
         runAI();
       }
     }
+  });
+  ['format-mode','interleave-mode','engine-select'].forEach(function(id){
+    var el = document.getElementById(id);
+    if (el) el.addEventListener('change', clearPendingTranslationState);
   });
 });
 
@@ -515,6 +526,32 @@ function alignQuotedHtmlWithReference(quotedHtml, extractedHtml, referenceText, 
   return {mode:'html', body: extractedHtml};
 }
 
+function selectionNeedsHumanCheck(selectedText, referenceText, srcLang){
+  if (!selectedText || selectedText.length < 40) return false;
+  var hasMailHeader = /^(From|Sent|To|Cc|Bcc|Subject|보낸\s*사람|보낸\s*날짜|받는\s*사람|참조|숨은\s*참조|제목|발신)\s*[:：]/im.test(selectedText);
+  var ref = (referenceText || '').trim();
+  if (!ref || ref.length < 40) return hasMailHeader;
+  if (looksLikeWrongSourceLanguage(ref, srcLang)) return hasMailHeader;
+  var score = scoreTextMatch(ref, selectedText);
+  console.log('[TH] 선택 영역 vs 원문칸 일치 점수:', score.toFixed(2), '/ 헤더 포함:', hasMailHeader);
+  return hasMailHeader || score < 0.18;
+}
+
+function confirmSelectedText(selectedText, referenceText, srcLang){
+  if (!selectionNeedsHumanCheck(selectedText, referenceText, srcLang)) return true;
+  var preview = (selectedText || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .substring(0, 500);
+  var msg =
+    '선택된 내용이 원문 본문 칸과 달라 보여요.\n\n' +
+    '긴 메일 스레드에서는 Outlook이 다른 사람 메일을 선택값으로 돌려주는 경우가 있어요.\n\n' +
+    '아래 내용이 번역하려던 원문이 맞으면 [확인]을 누르고,\n' +
+    '다른 사람 메일이면 [취소]를 누르세요.\n\n' +
+    '--- 선택된 내용 미리보기 ---\n' + preview;
+  return window.confirm(msg);
+}
+
 // buildHtml이 참조하는 임시 상태 (insertDirectly 안에서만 set)
 var _currentPending = null;
 function getPendingForBuild(){ return _currentPending; }
@@ -714,6 +751,14 @@ function translateSelection(){
       btn.disabled = false; btn.textContent = origLabel;
       showStatus('선택된 내용이 ' + sourceLangLabel(srcLang) + ' 원문처럼 보이지 않아 중단했어요. 긴 스레드에서는 정확한 본문을 다시 드래그하거나 원문칸/번역 방향을 확인해주세요.', 'error');
       console.warn('[TH] 선택 영역 언어 불일치 — 중단. 기대:', srcLang, '/ 선택 시작:', plainCheck.substring(0, 120));
+      return;
+    }
+    var selectedPlainText = htmlToPlainText(selHtml) || plainCheck;
+    var referenceText = (document.getElementById('body-orig').value || '').trim();
+    if (!confirmSelectedText(selectedPlainText, referenceText, srcLang)) {
+      btn.disabled = false; btn.textContent = origLabel;
+      showStatus('선택 영역 번역을 취소했어요. 정확한 본문을 다시 드래그하거나, 본문을 Ctrl+C로 복사한 뒤 클립보드 가져오기를 사용해주세요.', 'error');
+      console.warn('[TH] 선택 영역 사용자 취소 — 선택 시작:', selectedPlainText.substring(0, 160));
       return;
     }
 
@@ -999,6 +1044,7 @@ function keepUntilNextHeader(html){
 
 function setDir(d, isManual){
   direction=d;
+  clearPendingTranslationState();
   document.getElementById('btn-ko-en').classList.toggle('active',d==='ko-en');
   document.getElementById('btn-en-ko').classList.toggle('active',d==='en-ko');
   if(isManual){
@@ -1025,8 +1071,7 @@ function runAI(){
   var btn=document.getElementById('ai-btn');
   btn.disabled=true; btn.textContent='번역 중...';
   showStatus('번역 중입니다...');
-  lastInterleaveData = null;
-  try { localStorage.removeItem('th_interleave'); } catch(e){}
+  clearPendingTranslationState();
 
   var srcLang=direction==='ko-en'?'Korean':'English';
   var tgtLang=direction==='ko-en'?'English':'Korean';
