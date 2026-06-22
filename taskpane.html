@@ -159,6 +159,7 @@
 <div id="compose-status" class="status hidden"></div>
 
 <script>
+var APP_VERSION = '2026-06-22-safe-selection-confirm-v2';
 var direction='ko-en', isComposeMode=false, dirManuallySet=false, clipboardOverride=false;
 // 서식 모드 번역 결과의 원본 HTML을 textarea 우회해서 보관 (textarea는 display용)
 var lastHtmlTranslation = null;
@@ -252,6 +253,7 @@ function updateWordCount(text){
 }
 
 Office.onReady(function(info){
+  console.log('[TH] Translation Helper version:', APP_VERSION);
   loadAllKeys();
   if(info.host!==Office.HostType.Outlook) return;
   var item=Office.context.mailbox.item;
@@ -538,13 +540,15 @@ function selectionNeedsHumanCheck(selectedText, referenceText, srcLang){
 }
 
 function confirmSelectedText(selectedText, referenceText, srcLang){
-  if (!selectionNeedsHumanCheck(selectedText, referenceText, srcLang)) return true;
+  var risky = selectionNeedsHumanCheck(selectedText, referenceText, srcLang);
   var preview = (selectedText || '')
     .replace(/\s+/g, ' ')
     .trim()
     .substring(0, 500);
+  if (!preview) return false;
   var msg =
-    '선택된 내용이 원문 본문 칸과 달라 보여요.\n\n' +
+    '선택 영역 번역 안전 확인\n\n' +
+    (risky ? '선택된 내용이 원문 본문 칸과 달라 보여요.\n\n' : '') +
     '긴 메일 스레드에서는 Outlook이 다른 사람 메일을 선택값으로 돌려주는 경우가 있어요.\n\n' +
     '아래 내용이 번역하려던 원문이 맞으면 [확인]을 누르고,\n' +
     '다른 사람 메일이면 [취소]를 누르세요.\n\n' +
