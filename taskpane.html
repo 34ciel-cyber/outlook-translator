@@ -178,7 +178,7 @@
 <div id="compose-status" class="status hidden"></div>
 
 <script>
-var APP_VERSION = '2026-06-23-source-candidates-v9';
+var APP_VERSION = '2026-06-23-source-candidates-v10';
 var direction='ko-en', isComposeMode=false, dirManuallySet=false, clipboardOverride=false;
 // 서식 모드 번역 결과의 원본 HTML을 textarea 우회해서 보관 (textarea는 display용)
 var lastHtmlTranslation = null;
@@ -605,7 +605,7 @@ function findHtmlByReferenceText(fullHtml, referenceText){
     var doc = parser.parseFromString('<!DOCTYPE html><html><body>' + fullHtml + '</body></html>', 'text/html');
     var refLen = normalizeTextForMatch(referenceText).length;
     var nodes = doc.body.querySelectorAll('p, div, table, blockquote, li');
-    var best = {weighted:0, score:0, html:'', len:0};
+    var best = {weighted:0, score:0, html:'', len:0, node:null};
     for (var i = 0; i < nodes.length; i++) {
       var text = (nodes[i].textContent || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
       if (text.length < 10) continue;
@@ -618,17 +618,90 @@ function findHtmlByReferenceText(fullHtml, referenceText){
       // 전체 스레드처럼 너무 큰 컨테이너는 점수를 낮추고, 원문 길이에 가까운 블록을 우선한다.
       var weighted = score * Math.max(0.15, ratio);
       if (weighted > best.weighted) {
-        best = {weighted:weighted, score:score, html:nodes[i].outerHTML || '', len:candLen};
+        best = {weighted:weighted, score:score, html:nodes[i].outerHTML || '', len:candLen, node:nodes[i]};
       }
     }
     if (best.html && best.score >= 0.45) {
-      console.log('[TH] 원문칸 기준 HTML 후보 발견 — score:', best.score.toFixed(2), '/ weighted:', best.weighted.toFixed(2), '/ len:', best.len);
-      return best.html;
+      var expanded = expandReferenceHtmlAroundNode(best.node, referenceText) || best.html;
+      var expandedText = htmlToPlainText(expanded);
+      var expandedStats = getReferenceMatchStats(referenceText, expandedText);
+      console.log('[TH] 원문칸 기준 HTML 후보 발견 — score:', best.score.toFixed(2), '/ weighted:', best.weighted.toFixed(2), '/ len:', best.len, '/ expanded coverage:', expandedStats.coverage.toFixed(2), '/ ratio:', expandedStats.lengthRatio.toFixed(2));
+      return expanded;
     }
   } catch(e) {
     console.log('[TH] 원문칸 기준 HTML 검색 실패:', e.message);
   }
   return '';
+}
+
+function isHeaderBoundaryNode(node){
+  if (!node) return false;
+  if (node.nodeType === 1 && (node.tagName || '').toUpperCase() === 'HR') return true;
+  var text = (node.textContent || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+  return /^(From|Sent|To|Cc|Bcc|Subject|보낸\s*사람|보낸\s*날짜|받는\s*사람|참조|숨은\s*참조|제목|발신)\s*[:：]/i.test(text);
+}
+
+function siblingOuterHtml(node){
+  if (!node) return '';
+  if (node.nodeType === 1) return node.outerHTML || '';
+  if (node.nodeType === 3) return esc(node.nodeValue || '');
+  return '';
+}
+
+function htmlFromSiblingRange(siblings, start, end){
+  var parts = [];
+  for (var i = start; i <= end; i++) parts.push(siblingOuterHtml(siblings[i]));
+  return parts.join('');
+}
+
+function containsReferenceEdge(candidateText, referenceText, edge){
+  var cand = normalizeTextForMatch(candidateText);
+  var ref = normalizeTextForMatch(referenceText);
+  if (!cand || !ref) return false;
+  var snippet = edge === 'start'
+    ? ref.substring(0, Math.min(90, ref.length)).trim()
+    : ref.substring(Math.max(0, ref.length - 90)).trim();
+  if (snippet.length < 25) return true;
+  return cand.indexOf(snippet) >= 0;
+}
+
+function expandReferenceHtmlAroundNode(node, referenceText){
+  if (!node || !node.parentNode || !referenceText) return '';
+  var parent = node.parentNode;
+  var siblings = Array.prototype.slice.call(parent.childNodes).filter(function(n){
+    if (n.nodeType === 3) return !!(n.nodeValue || '').trim();
+    return n.nodeType === 1;
+  });
+  var idx = siblings.indexOf(node);
+  if (idx < 0) return node.outerHTML || '';
+
+  var start = idx;
+  var end = idx;
+  var guard = 0;
+  while (start > 0 && guard++ < 30) {
+    if (isHeaderBoundaryNode(siblings[start - 1])) break;
+    var testHtml = htmlFromSiblingRange(siblings, start - 1, end);
+    var testText = htmlToPlainText(testHtml);
+    start--;
+    if (containsReferenceEdge(testText, referenceText, 'start')) break;
+  }
+
+  guard = 0;
+  while (end < siblings.length - 1 && guard++ < 40) {
+    if (isHeaderBoundaryNode(siblings[end + 1])) break;
+    var testHtml2 = htmlFromSiblingRange(siblings, start, end + 1);
+    var testText2 = htmlToPlainText(testHtml2);
+    end++;
+    if (containsReferenceEdge(testText2, referenceText, 'end')) break;
+    var refLen = normalizeTextForMatch(referenceText).length || 1;
+    var testLen = normalizeTextForMatch(testText2).length || 1;
+    if (testLen > refLen * 1.8) break;
+  }
+
+  var expanded = htmlFromSiblingRange(siblings, start, end);
+  var stats = getReferenceMatchStats(referenceText, htmlToPlainText(expanded));
+  if (stats.coverage >= 0.55 && stats.lengthRatio >= 0.25) return expanded;
+  return node.outerHTML || '';
 }
 
 function renderSourceCandidates(candidates){
