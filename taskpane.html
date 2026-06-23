@@ -178,7 +178,7 @@
 <div id="compose-status" class="status hidden"></div>
 
 <script>
-var APP_VERSION = '2026-06-23-source-candidates-v5';
+var APP_VERSION = '2026-06-23-source-candidates-v6';
 var direction='ko-en', isComposeMode=false, dirManuallySet=false, clipboardOverride=false;
 // 서식 모드 번역 결과의 원본 HTML을 textarea 우회해서 보관 (textarea는 display용)
 var lastHtmlTranslation = null;
@@ -504,13 +504,14 @@ function getWordCounts(text){
   return counts;
 }
 
-function makeSourceCandidate(html, displayIndex){
+function makeSourceCandidate(html, displayIndex, label){
   var text = htmlToPlainText(html);
   var compact = (text || '').replace(/\s+/g, ' ').trim();
   var lang = detectLanguage(compact);
   var counts = getWordCounts(compact);
   return {
     index: displayIndex,
+    label: label || '',
     html: html,
     text: compact,
     lang: lang || 'unknown',
@@ -523,24 +524,28 @@ function buildSourceCandidatesFromFullHtml(fullHtml){
   var quotedHtml = extractQuotedHtml(fullHtml || '');
   var htmlList = [];
   if (quotedHtml) {
-    htmlList = extractQuotedMessageCandidates(quotedHtml);
-    if (htmlList.length < 3) {
+    // 후보 목록의 1번은 항상 기존 자동 추출 결과로 둔다.
+    // 그래야 "아무것도 안 하면 잡히는 직전 메일"이 후보 목록에서도 보인다.
+    var autoHtml = keepUntilNextHeader(removeFirstHeaderDiv(quotedHtml));
+    if (htmlToPlainText(autoHtml).length >= 10) htmlList.push({html:autoHtml, label:'자동 직전'});
+
+    var threadCandidates = extractQuotedMessageCandidates(quotedHtml);
+    htmlList = htmlList.concat(threadCandidates);
+    if (threadCandidates.length < 3) {
       htmlList = htmlList.concat(collectMatchingHtmlContainers(quotedHtml));
-    }
-    if (htmlList.length === 0) {
-      var autoHtml = keepUntilNextHeader(removeFirstHeaderDiv(quotedHtml));
-      if (htmlToPlainText(autoHtml).length >= 10) htmlList.push(autoHtml);
     }
   }
 
   var seen = {};
   var result = [];
-  htmlList.forEach(function(html){
+  htmlList.forEach(function(item){
+    var html = (typeof item === 'string') ? item : item.html;
+    var label = (typeof item === 'string') ? '' : item.label;
     var text = htmlToPlainText(html);
     var norm = normalizeTextForMatch(text).substring(0, 500);
     if (!norm || norm.length < 10 || seen[norm]) return;
     seen[norm] = true;
-    result.push(makeSourceCandidate(html, result.length + 1));
+    result.push(makeSourceCandidate(html, result.length + 1, label));
   });
   return result.slice(0, 25);
 }
@@ -566,7 +571,7 @@ function renderSourceCandidates(candidates){
     var langLabel = c.lang === 'ko' ? '한국어' : (c.lang === 'en' ? '영어' : '언어 미확인');
     var meta = document.createElement('div');
     meta.className = 'candidate-meta';
-    meta.textContent = '[' + c.index + '] ' + langLabel + ' · ' + c.counts.total + '단어' +
+    meta.textContent = '[' + c.index + '] ' + (c.label ? c.label + ' · ' : '') + langLabel + ' · ' + c.counts.total + '단어' +
       (c.counts.en ? ' · EN ' + c.counts.en : '') +
       (c.counts.ko ? ' · KO ' + c.counts.ko : '');
     var preview = document.createElement('div');
