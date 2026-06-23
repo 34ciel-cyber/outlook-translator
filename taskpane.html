@@ -178,7 +178,7 @@
 <div id="compose-status" class="status hidden"></div>
 
 <script>
-var APP_VERSION = '2026-06-23-source-candidates-v7';
+var APP_VERSION = '2026-06-23-source-candidates-v8';
 var direction='ko-en', isComposeMode=false, dirManuallySet=false, clipboardOverride=false;
 // 서식 모드 번역 결과의 원본 HTML을 textarea 우회해서 보관 (textarea는 display용)
 var lastHtmlTranslation = null;
@@ -523,6 +523,12 @@ function makeSourceCandidate(html, displayIndex, label){
 function buildSourceCandidatesFromFullHtml(fullHtml, referenceText){
   var quotedHtml = extractQuotedHtml(fullHtml || '');
   var htmlList = [];
+  var referenceMatchedHtml = findHtmlByReferenceText(fullHtml || '', referenceText || '');
+  if (referenceMatchedHtml) {
+    htmlList.push({html:referenceMatchedHtml, label:'현재 원문칸과 일치'});
+  } else if (referenceText && referenceText.trim().length >= 10) {
+    htmlList.push({html:'<div>' + esc(referenceText.trim()) + '</div>', label:'현재 원문칸 텍스트'});
+  }
   if (quotedHtml) {
     // 자동 추출 결과도 후보에 포함하되, 1번 자리는 아래에서 원문칸과 가장 잘 맞는 후보로 재정렬한다.
     var autoHtml = keepUntilNextHeader(removeFirstHeaderDiv(quotedHtml));
@@ -559,6 +565,37 @@ function buildSourceCandidatesFromFullHtml(fullHtml, referenceText){
     result.forEach(function(c, idx){ c.index = idx + 1; });
   }
   return result.slice(0, 25);
+}
+
+function findHtmlByReferenceText(fullHtml, referenceText){
+  if (!fullHtml || !referenceText || normalizeTextForMatch(referenceText).length < 10) return '';
+  try {
+    var parser = new DOMParser();
+    var doc = parser.parseFromString('<!DOCTYPE html><html><body>' + fullHtml + '</body></html>', 'text/html');
+    var refLen = normalizeTextForMatch(referenceText).length;
+    var nodes = doc.body.querySelectorAll('p, div, table, blockquote, li');
+    var best = {weighted:0, score:0, html:'', len:0};
+    for (var i = 0; i < nodes.length; i++) {
+      var text = (nodes[i].textContent || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+      if (text.length < 10) continue;
+      var score = scoreTextMatch(referenceText, text);
+      if (score < 0.12) continue;
+      var candLen = normalizeTextForMatch(text).length || 1;
+      var ratio = candLen > refLen ? refLen / candLen : candLen / refLen;
+      // 전체 스레드처럼 너무 큰 컨테이너는 점수를 낮추고, 원문 길이에 가까운 블록을 우선한다.
+      var weighted = score * Math.max(0.15, ratio);
+      if (weighted > best.weighted) {
+        best = {weighted:weighted, score:score, html:nodes[i].outerHTML || '', len:candLen};
+      }
+    }
+    if (best.html && best.score >= 0.18) {
+      console.log('[TH] 원문칸 기준 HTML 후보 발견 — score:', best.score.toFixed(2), '/ weighted:', best.weighted.toFixed(2), '/ len:', best.len);
+      return best.html;
+    }
+  } catch(e) {
+    console.log('[TH] 원문칸 기준 HTML 검색 실패:', e.message);
+  }
+  return '';
 }
 
 function renderSourceCandidates(candidates){
