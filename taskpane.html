@@ -65,6 +65,14 @@
     .format-toggle { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #666; margin-top: 8px; cursor: pointer; user-select: none; }
     .format-toggle input { cursor: pointer; }
     .format-toggle .info { color: #888; font-size: 10px; margin-left: 4px; }
+    .candidate-panel { margin-top: 8px; border: 1px solid #d8e2f3; border-radius: 6px; background: #f8fbff; padding: 8px; }
+    .candidate-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .candidate-title { font-size: 11px; font-weight: 700; color: #4472C4; }
+    .candidate-list { display: flex; flex-direction: column; gap: 6px; max-height: 220px; overflow: auto; }
+    .candidate-item { width: 100%; text-align: left; border: 1px solid #d0d0d0; background: #fff; border-radius: 5px; padding: 7px 8px; cursor: pointer; }
+    .candidate-item:hover { border-color: #4472C4; background: rgba(68,114,196,0.05); }
+    .candidate-meta { font-size: 10px; font-weight: 700; color: #555; margin-bottom: 3px; }
+    .candidate-preview { font-size: 11px; color: #333; line-height: 1.4; word-break: break-word; }
   </style>
 </head>
 <body>
@@ -125,8 +133,16 @@
     <textarea id="body-orig" placeholder="원문 본문" oninput="onOrigChange()"></textarea>
     <div id="img-warning" class="img-warning hidden">⚠️ 이 메일에 이미지가 포함되어 있어요. 이미지는 자동 처리되지 않으니, 필요하면 텍스트만 선택해 복사한 뒤 [📋 클립보드에서 가져오기]를 눌러주세요.</div>
     <div class="reload-row" style="gap:6px;">
+      <button class="btn-small" onclick="showSourceCandidates()" title="긴 스레드에서 번역할 원문 메일을 직접 고릅니다.">🧭 원문 후보 선택</button>
       <button class="btn-small" onclick="pasteFromClipboard()" style="background:#4472C4;color:#fff;border-color:#4472C4;">📋 클립보드에서 가져오기</button>
       <button class="btn-small" onclick="pasteHtmlFromClipboard()" title="메일에서 원하는 본문을 드래그한 뒤 Ctrl+C로 복사하고 누르세요. 가능한 경우 서식 포함 HTML을 가져옵니다.">📋 서식 포함 가져오기</button>
+    </div>
+    <div id="candidate-panel" class="candidate-panel hidden">
+      <div class="candidate-head">
+        <div class="candidate-title">원문 후보</div>
+        <button class="btn-small" onclick="hide('candidate-panel')">닫기</button>
+      </div>
+      <div class="candidate-list" id="candidate-list"></div>
     </div>
     <label class="format-toggle">
       <input type="checkbox" id="format-mode" />
@@ -162,13 +178,14 @@
 <div id="compose-status" class="status hidden"></div>
 
 <script>
-var APP_VERSION = '2026-06-23-dynamic-token-v4';
+var APP_VERSION = '2026-06-23-source-candidates-v5';
 var direction='ko-en', isComposeMode=false, dirManuallySet=false, clipboardOverride=false;
 // 서식 모드 번역 결과의 원본 HTML을 textarea 우회해서 보관 (textarea는 display용)
 var lastHtmlTranslation = null;
 // 교차 삽입용 원문/번역 쌍. HTML 교차 모드는 localStorage 대신 메모리에 보관해 용량 초과를 피함.
 var lastInterleaveData = null;
 var clipboardHtmlOverride = null;
+var sourceCandidates = [];
 function show(id){document.getElementById(id).classList.remove('hidden');}
 function hide(id){document.getElementById(id).classList.add('hidden');}
 
@@ -227,6 +244,7 @@ function clearPendingTranslationState(){
   lastHtmlTranslation = null;
   lastInterleaveData = null;
   clipboardHtmlOverride = null;
+  hide('candidate-panel');
   try { localStorage.removeItem('th_interleave'); } catch(e){}
 }
 
@@ -475,6 +493,130 @@ function extractQuotedMessageCandidates(quotedHtml){
   return candidates;
 }
 
+function getWordCounts(text){
+  var counts = {ko:0, en:0};
+  (text || '').trim().split(/\s+/).forEach(function(tok){
+    if (!tok) return;
+    if (/[\u3131-\u3163\uac00-\ud7a3]/.test(tok)) counts.ko++;
+    else if (/[a-zA-Z]/.test(tok)) counts.en++;
+  });
+  counts.total = counts.ko + counts.en;
+  return counts;
+}
+
+function makeSourceCandidate(html, displayIndex){
+  var text = htmlToPlainText(html);
+  var compact = (text || '').replace(/\s+/g, ' ').trim();
+  var lang = detectLanguage(compact);
+  var counts = getWordCounts(compact);
+  return {
+    index: displayIndex,
+    html: html,
+    text: compact,
+    lang: lang || 'unknown',
+    counts: counts,
+    preview: compact.substring(0, 180)
+  };
+}
+
+function buildSourceCandidatesFromFullHtml(fullHtml){
+  var quotedHtml = extractQuotedHtml(fullHtml || '');
+  var htmlList = [];
+  if (quotedHtml) {
+    htmlList = extractQuotedMessageCandidates(quotedHtml);
+    if (htmlList.length < 3) {
+      htmlList = htmlList.concat(collectMatchingHtmlContainers(quotedHtml));
+    }
+    if (htmlList.length === 0) {
+      var autoHtml = keepUntilNextHeader(removeFirstHeaderDiv(quotedHtml));
+      if (htmlToPlainText(autoHtml).length >= 10) htmlList.push(autoHtml);
+    }
+  }
+
+  var seen = {};
+  var result = [];
+  htmlList.forEach(function(html){
+    var text = htmlToPlainText(html);
+    var norm = normalizeTextForMatch(text).substring(0, 500);
+    if (!norm || norm.length < 10 || seen[norm]) return;
+    seen[norm] = true;
+    result.push(makeSourceCandidate(html, result.length + 1));
+  });
+  return result.slice(0, 25);
+}
+
+function renderSourceCandidates(candidates){
+  var panel = document.getElementById('candidate-panel');
+  var list = document.getElementById('candidate-list');
+  if (!panel || !list) return;
+  list.innerHTML = '';
+  if (!candidates || candidates.length === 0) {
+    var empty = document.createElement('div');
+    empty.className = 'src-hint';
+    empty.textContent = '후보를 찾지 못했어요. 필요한 본문을 드래그해 Ctrl+C 후 [서식 포함 가져오기]를 사용해주세요.';
+    list.appendChild(empty);
+    show('candidate-panel');
+    return;
+  }
+  candidates.forEach(function(c, idx){
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'candidate-item';
+    btn.onclick = function(){ selectSourceCandidate(idx); };
+    var langLabel = c.lang === 'ko' ? '한국어' : (c.lang === 'en' ? '영어' : '언어 미확인');
+    var meta = document.createElement('div');
+    meta.className = 'candidate-meta';
+    meta.textContent = '[' + c.index + '] ' + langLabel + ' · ' + c.counts.total + '단어' +
+      (c.counts.en ? ' · EN ' + c.counts.en : '') +
+      (c.counts.ko ? ' · KO ' + c.counts.ko : '');
+    var preview = document.createElement('div');
+    preview.className = 'candidate-preview';
+    preview.textContent = c.preview || '(미리보기 없음)';
+    btn.appendChild(meta);
+    btn.appendChild(preview);
+    list.appendChild(btn);
+  });
+  show('candidate-panel');
+}
+
+function showSourceCandidates(){
+  if (!isComposeMode) {
+    showStatus('회신 작성 모드에서만 원문 후보를 선택할 수 있어요.', 'error');
+    return;
+  }
+  showStatus('스레드에서 원문 후보를 찾는 중...');
+  Office.context.mailbox.item.body.getAsync(Office.CoercionType.Html, function(rH){
+    if (rH.status !== Office.AsyncResultStatus.Succeeded) {
+      showStatus('회신 본문 HTML을 가져오지 못했어요.', 'error');
+      return;
+    }
+    sourceCandidates = buildSourceCandidatesFromFullHtml(rH.value || '');
+    console.log('[TH] 원문 후보 수:', sourceCandidates.length);
+    renderSourceCandidates(sourceCandidates);
+    if (sourceCandidates.length > 0) {
+      showStatus('원문 후보 ' + sourceCandidates.length + '개를 찾았어요. 번역할 메일을 선택하세요.', 'success');
+    } else {
+      showStatus('원문 후보를 찾지 못했어요.', 'error');
+    }
+  });
+}
+
+function selectSourceCandidate(idx){
+  var c = sourceCandidates[idx];
+  if (!c) return;
+  clipboardOverride = true;
+  var ta = document.getElementById('body-orig');
+  ta.value = c.text;
+  ta.dispatchEvent(new Event('input', { bubbles: true }));
+  clipboardHtmlOverride = c.html;
+  document.getElementById('format-mode').checked = true;
+  setSrcBadge('후보 ' + c.index, true);
+  updateWordCount(c.text);
+  hide('candidate-panel');
+  showStatus('✓ 후보 ' + c.index + '번을 원문으로 선택했어요. 서식 유지 모드로 번역됩니다.', 'success');
+  console.log('[TH] 원문 후보 선택:', c.index, '/ HTML:', c.html.length, '/ Text:', c.text.length);
+}
+
 function collectMatchingHtmlContainers(quotedHtml){
   var candidates = [];
   if (!quotedHtml) return candidates;
@@ -713,7 +855,6 @@ function pasteHtmlFromClipboard(){
         clipboardHtmlOverride = html;
         document.getElementById('format-mode').checked = true;
         setSrcBadge('서식 클립보드', true);
-        autoDetectAndSetDir(plain);
         updateWordCount(plain);
         showStatus('✓ 서식 포함 클립보드에서 ' + plain.length + '자 가져옴. 이제 AI 자동 번역을 누르세요.', 'success');
         console.log('[TH] 서식 클립보드 HTML 길이:', html.length, '/ 텍스트 길이:', plain.length);
