@@ -178,7 +178,7 @@
 <div id="compose-status" class="status hidden"></div>
 
 <script>
-var APP_VERSION = '2026-06-23-source-candidates-v8';
+var APP_VERSION = '2026-06-23-source-candidates-v9';
 var direction='ko-en', isComposeMode=false, dirManuallySet=false, clipboardOverride=false;
 // 서식 모드 번역 결과의 원본 HTML을 textarea 우회해서 보관 (textarea는 display용)
 var lastHtmlTranslation = null;
@@ -449,6 +449,36 @@ function scoreTextMatch(referenceText, candidateText){
   return Math.min(1, score);
 }
 
+function getReferenceMatchStats(referenceText, candidateText){
+  var refNorm = normalizeTextForMatch(referenceText);
+  var candNorm = normalizeTextForMatch(candidateText);
+  var refTokens = getMatchTokens(referenceText);
+  if (!refNorm || !candNorm || refTokens.length === 0) {
+    return {coverage:0, lengthRatio:0, containsSnippet:false, strong:false};
+  }
+  var candPadded = ' ' + candNorm + ' ';
+  var hits = 0;
+  refTokens.forEach(function(tok){
+    if (candPadded.indexOf(' ' + tok + ' ') >= 0) hits++;
+  });
+  var coverage = hits / refTokens.length;
+  var lengthRatio = candNorm.length > refNorm.length
+    ? refNorm.length / candNorm.length
+    : candNorm.length / refNorm.length;
+  var firstSnippet = refNorm.substring(0, Math.min(90, refNorm.length)).trim();
+  var lastSnippet = refNorm.substring(Math.max(0, refNorm.length - 90)).trim();
+  var containsSnippet =
+    (firstSnippet.length >= 25 && candNorm.indexOf(firstSnippet) >= 0) ||
+    (lastSnippet.length >= 25 && candNorm.indexOf(lastSnippet) >= 0);
+  var strong = (coverage >= 0.75 && lengthRatio >= 0.30) || (coverage >= 0.60 && containsSnippet);
+  return {
+    coverage: coverage,
+    lengthRatio: lengthRatio,
+    containsSnippet: containsSnippet,
+    strong: strong
+  };
+}
+
 function getHeaderTopNodes(root){
   var HEADER_RE = /^(From|Sent|To|Cc|Bcc|Subject|보낸\s*사람|보낸\s*날짜|받는\s*사람|참조|숨은\s*참조|제목|발신)\s*[:：]/i;
   var blocks = root.querySelectorAll('p, div, table');
@@ -525,9 +555,9 @@ function buildSourceCandidatesFromFullHtml(fullHtml, referenceText){
   var htmlList = [];
   var referenceMatchedHtml = findHtmlByReferenceText(fullHtml || '', referenceText || '');
   if (referenceMatchedHtml) {
-    htmlList.push({html:referenceMatchedHtml, label:'현재 원문칸과 일치'});
+    htmlList.push({html:referenceMatchedHtml, label:'현재 원문칸 HTML'});
   } else if (referenceText && referenceText.trim().length >= 10) {
-    htmlList.push({html:'<div>' + esc(referenceText.trim()) + '</div>', label:'현재 원문칸 텍스트'});
+    htmlList.push({html:'<div>' + esc(referenceText.trim()) + '</div>', label:'현재 원문칸 텍스트 (서식 없음)'});
   }
   if (quotedHtml) {
     // 자동 추출 결과도 후보에 포함하되, 1번 자리는 아래에서 원문칸과 가장 잘 맞는 후보로 재정렬한다.
@@ -552,16 +582,17 @@ function buildSourceCandidatesFromFullHtml(fullHtml, referenceText){
     seen[norm] = true;
     var candidate = makeSourceCandidate(html, result.length + 1, label);
     candidate.matchScore = referenceText ? scoreTextMatch(referenceText, candidate.text) : 0;
+    candidate.matchStats = referenceText ? getReferenceMatchStats(referenceText, candidate.text) : null;
     result.push(candidate);
   });
 
   if (referenceText && normalizeTextForMatch(referenceText).length >= 10 && result.length > 1) {
     result.sort(function(a, b){
+      var aPinned = /^현재 원문칸/.test(a.label || '') ? 1 : 0;
+      var bPinned = /^현재 원문칸/.test(b.label || '') ? 1 : 0;
+      if (aPinned !== bPinned) return bPinned - aPinned;
       return (b.matchScore || 0) - (a.matchScore || 0);
     });
-    if ((result[0].matchScore || 0) >= 0.12) {
-      result[0].label = '현재 원문칸과 일치';
-    }
     result.forEach(function(c, idx){ c.index = idx + 1; });
   }
   return result.slice(0, 25);
@@ -582,13 +613,15 @@ function findHtmlByReferenceText(fullHtml, referenceText){
       if (score < 0.12) continue;
       var candLen = normalizeTextForMatch(text).length || 1;
       var ratio = candLen > refLen ? refLen / candLen : candLen / refLen;
+      var stats = getReferenceMatchStats(referenceText, text);
+      if (!stats.strong) continue;
       // 전체 스레드처럼 너무 큰 컨테이너는 점수를 낮추고, 원문 길이에 가까운 블록을 우선한다.
       var weighted = score * Math.max(0.15, ratio);
       if (weighted > best.weighted) {
         best = {weighted:weighted, score:score, html:nodes[i].outerHTML || '', len:candLen};
       }
     }
-    if (best.html && best.score >= 0.18) {
+    if (best.html && best.score >= 0.45) {
       console.log('[TH] 원문칸 기준 HTML 후보 발견 — score:', best.score.toFixed(2), '/ weighted:', best.weighted.toFixed(2), '/ len:', best.len);
       return best.html;
     }
