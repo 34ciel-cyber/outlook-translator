@@ -162,7 +162,7 @@
 <div id="compose-status" class="status hidden"></div>
 
 <script>
-var APP_VERSION = '2026-06-22-fast-prompt-v3';
+var APP_VERSION = '2026-06-23-dynamic-token-v4';
 var direction='ko-en', isComposeMode=false, dirManuallySet=false, clipboardOverride=false;
 // 서식 모드 번역 결과의 원본 HTML을 textarea 우회해서 보관 (textarea는 display용)
 var lastHtmlTranslation = null;
@@ -1676,6 +1676,25 @@ function getTranslationStyleRules(srcLang, tgtLang){
   return common + '\n';
 }
 
+function clampTokenBudget(value, minValue, maxValue){
+  return Math.max(minValue, Math.min(maxValue, value));
+}
+
+function estimateTextMaxTokens(subject, body, provider){
+  var chars = ((subject || '') + '\n' + (body || '')).length;
+  var hardMax = provider === 'claude' ? TRANSLATE_MAX_TOKENS_CLAUDE : TRANSLATE_MAX_TOKENS_OPENAI;
+  // 짧은 메일은 작은 출력 한도로 보내서 latency를 낮춘다. 긴 메일은 기존 상한까지 확장.
+  return clampTokenBudget(Math.ceil(chars * 1.2) + 1200, 1500, hardMax);
+}
+
+function estimateChunkedMaxTokens(chunks, provider){
+  var chars = 0;
+  (chunks || []).forEach(function(c){ chars += String(c || '').length; });
+  var hardMax = provider === 'claude' ? TRANSLATE_MAX_TOKENS_CLAUDE : TRANSLATE_MAX_TOKENS_OPENAI;
+  // JSON 배열 오버헤드가 있어 청크 개수당 여유를 둔다.
+  return clampTokenBudget(Math.ceil(chars * 1.1) + (chunks.length * 22) + 900, 1800, hardMax);
+}
+
 function trClaude(key,subject,body,srcLang,tgtLang,mode,modelId){
   var sysMsg;
   if (mode === 'html') {
@@ -1700,7 +1719,7 @@ function trClaude(key,subject,body,srcLang,tgtLang,mode,modelId){
   return fetch('https://api.anthropic.com/v1/messages',{
     method:'POST',
     headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-    body:JSON.stringify({model:modelId||'claude-haiku-4-5-20251001',max_tokens:16000,
+    body:JSON.stringify({model:modelId||'claude-haiku-4-5-20251001',max_tokens:estimateTextMaxTokens(subject, body, 'claude'),
       system:sysMsg,
       messages:[{role:'user',content:'Subject: '+(subject||'(none)')+'\n\nBody:\n'+body}]})
   }).then(function(r){return r.text().then(function(t){
@@ -1734,7 +1753,7 @@ function trOpenAI(key,subject,body,srcLang,tgtLang,mode){
   return fetch('https://api.openai.com/v1/chat/completions',{
     method:'POST',
     headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
-    body:JSON.stringify({model:'gpt-4o-mini',max_tokens:16000,
+    body:JSON.stringify({model:'gpt-4o-mini',max_tokens:estimateTextMaxTokens(subject, body, 'openai'),
       messages:[
         {role:'system',content:sysMsg},
         {role:'user',content:'Subject: '+(subject||'(none)')+'\n\nBody:\n'+body}
@@ -1856,10 +1875,11 @@ function translateOneBatch(provider, key, batchChunks, srcLang, tgtLang, modelId
     '(5) Prefer Korean-style quotes (\u201C \u201D \u300C \u300D) over straight ASCII quotes in Korean output to avoid JSON escaping issues.';
 
   if (provider === 'claude') {
+    var claudeMaxTokens = estimateChunkedMaxTokens(batchChunks, 'claude');
     return fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
       headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({model:modelId||'claude-haiku-4-5-20251001',max_tokens:TRANSLATE_MAX_TOKENS_CLAUDE,system:sysMsg,messages:[{role:'user',content:promptUser}]})
+      body:JSON.stringify({model:modelId||'claude-haiku-4-5-20251001',max_tokens:claudeMaxTokens,system:sysMsg,messages:[{role:'user',content:promptUser}]})
     }).then(function(r){return r.text().then(function(t){
       if(!r.ok){var e=JSON.parse(t);throw new Error(e.error&&e.error.message||'HTTP '+r.status);}
       var data=JSON.parse(t);
@@ -1869,10 +1889,11 @@ function translateOneBatch(provider, key, batchChunks, srcLang, tgtLang, modelId
       return parseChunkedResult(raw, batchChunks, stopReason, bIdx, total);
     });});
   } else {
+    var openaiMaxTokens = estimateChunkedMaxTokens(batchChunks, 'openai');
     return fetch('https://api.openai.com/v1/chat/completions',{
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
-      body:JSON.stringify({model:'gpt-4o-mini',max_tokens:TRANSLATE_MAX_TOKENS_OPENAI,messages:[{role:'system',content:sysMsg},{role:'user',content:promptUser}]})
+      body:JSON.stringify({model:'gpt-4o-mini',max_tokens:openaiMaxTokens,messages:[{role:'system',content:sysMsg},{role:'user',content:promptUser}]})
     }).then(function(r){return r.text().then(function(t){
       if(!r.ok){var e=JSON.parse(t);throw new Error(e.error&&e.error.message||'HTTP '+r.status);}
       var data=JSON.parse(t);
