@@ -178,7 +178,7 @@
 <div id="compose-status" class="status hidden"></div>
 
 <script>
-var APP_VERSION = '2026-06-23-source-candidates-v6';
+var APP_VERSION = '2026-06-23-source-candidates-v7';
 var direction='ko-en', isComposeMode=false, dirManuallySet=false, clipboardOverride=false;
 // 서식 모드 번역 결과의 원본 HTML을 textarea 우회해서 보관 (textarea는 display용)
 var lastHtmlTranslation = null;
@@ -520,14 +520,13 @@ function makeSourceCandidate(html, displayIndex, label){
   };
 }
 
-function buildSourceCandidatesFromFullHtml(fullHtml){
+function buildSourceCandidatesFromFullHtml(fullHtml, referenceText){
   var quotedHtml = extractQuotedHtml(fullHtml || '');
   var htmlList = [];
   if (quotedHtml) {
-    // 후보 목록의 1번은 항상 기존 자동 추출 결과로 둔다.
-    // 그래야 "아무것도 안 하면 잡히는 직전 메일"이 후보 목록에서도 보인다.
+    // 자동 추출 결과도 후보에 포함하되, 1번 자리는 아래에서 원문칸과 가장 잘 맞는 후보로 재정렬한다.
     var autoHtml = keepUntilNextHeader(removeFirstHeaderDiv(quotedHtml));
-    if (htmlToPlainText(autoHtml).length >= 10) htmlList.push({html:autoHtml, label:'자동 직전'});
+    if (htmlToPlainText(autoHtml).length >= 10) htmlList.push({html:autoHtml, label:'자동 추출'});
 
     var threadCandidates = extractQuotedMessageCandidates(quotedHtml);
     htmlList = htmlList.concat(threadCandidates);
@@ -545,8 +544,20 @@ function buildSourceCandidatesFromFullHtml(fullHtml){
     var norm = normalizeTextForMatch(text).substring(0, 500);
     if (!norm || norm.length < 10 || seen[norm]) return;
     seen[norm] = true;
-    result.push(makeSourceCandidate(html, result.length + 1, label));
+    var candidate = makeSourceCandidate(html, result.length + 1, label);
+    candidate.matchScore = referenceText ? scoreTextMatch(referenceText, candidate.text) : 0;
+    result.push(candidate);
   });
+
+  if (referenceText && normalizeTextForMatch(referenceText).length >= 10 && result.length > 1) {
+    result.sort(function(a, b){
+      return (b.matchScore || 0) - (a.matchScore || 0);
+    });
+    if ((result[0].matchScore || 0) >= 0.12) {
+      result[0].label = '현재 원문칸과 일치';
+    }
+    result.forEach(function(c, idx){ c.index = idx + 1; });
+  }
   return result.slice(0, 25);
 }
 
@@ -595,7 +606,8 @@ function showSourceCandidates(){
       showStatus('회신 본문 HTML을 가져오지 못했어요.', 'error');
       return;
     }
-    sourceCandidates = buildSourceCandidatesFromFullHtml(rH.value || '');
+    var referenceText = (document.getElementById('body-orig').value || '').trim();
+    sourceCandidates = buildSourceCandidatesFromFullHtml(rH.value || '', referenceText);
     console.log('[TH] 원문 후보 수:', sourceCandidates.length);
     renderSourceCandidates(sourceCandidates);
     if (sourceCandidates.length > 0) {
