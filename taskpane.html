@@ -178,7 +178,7 @@
 <div id="compose-status" class="status hidden"></div>
 
 <script>
-var APP_VERSION = '2026-06-23-long-thread-guard-v12';
+var APP_VERSION = '2026-07-16-quality-context-v13';
 var direction='ko-en', isComposeMode=false, dirManuallySet=false, clipboardOverride=false;
 // 서식 모드 번역 결과의 원본 HTML을 textarea 우회해서 보관 (textarea는 display용)
 var lastHtmlTranslation = null;
@@ -1777,28 +1777,20 @@ function translateHtmlStructurally(htmlString, provider, key, srcLang, tgtLang, 
     var docu = parser.parseFromString('<!DOCTYPE html><html><body>'+htmlString+'</body></html>', 'text/html');
     var root = docu.body;
 
-    // 모든 텍스트 노드를 순서대로 수집 (script/style 안쪽은 제외, 공백만 있는 노드도 제외)
     var textNodes = [];
-    var walker = docu.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-      acceptNode: function(n){
-        var parentTag = n.parentNode && n.parentNode.tagName;
-        if (parentTag === 'SCRIPT' || parentTag === 'STYLE') return NodeFilter.FILTER_REJECT;
-        if (!n.nodeValue || !n.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
-        return NodeFilter.FILTER_ACCEPT;
-      }
-    }, false);
-    var node;
-    while ((node = walker.nextNode())) textNodes.push(node);
+    collectTranslatableTextNodes(root, textNodes);
 
     if (textNodes.length === 0) {
       resolve({translatedSubject: subject, translatedBody: htmlString});
       return;
     }
 
-    // 0번 슬롯에 subject, 그 뒤에 텍스트 노드들
-    var allChunks = [subject || '(none)'].concat(textNodes.map(function(n){ return n.nodeValue.trim(); }));
+    var prep = buildContextualTranslationPayload(root, textNodes, subject);
+    var allChunks = [makeTranslationChunk(subject || '(none)', prep.documentContext, 'subject')]
+      .concat(prep.chunks);
+    console.log('[TH] 서식 품질 모드 — 텍스트 노드:', textNodes.length, '/ 문맥 길이:', prep.documentContext.length);
 
-    translateChunked(provider, key, allChunks, srcLang, tgtLang, modelId)
+    translateChunked(provider, key, allChunks, srcLang, tgtLang, modelId, {documentContext: prep.documentContext})
       .then(function(translations){
         var translatedSubject = (translations[0] && translations[0].trim()) || subject;
         // 원본의 leading/trailing 공백을 보존하면서 텍스트만 교체
@@ -1866,8 +1858,10 @@ function translateHtmlInterleaved(htmlString, provider, key, srcLang, tgtLang, m
       return;
     }
 
-    var allChunks = [subject || '(none)'].concat(textNodes.map(function(n){ return n.nodeValue.trim(); }));
-    translateChunked(provider, key, allChunks, srcLang, tgtLang, modelId)
+    var prep = buildContextualTranslationPayload(root, textNodes, subject);
+    var allChunks = [makeTranslationChunk(subject || '(none)', prep.documentContext, 'subject')]
+      .concat(prep.chunks);
+    translateChunked(provider, key, allChunks, srcLang, tgtLang, modelId, {documentContext: prep.documentContext})
       .then(function(translations){
         var translatedSubject = (translations[0] && translations[0].trim()) || subject;
         textNodes.forEach(function(n, i){
@@ -1910,6 +1904,77 @@ function collectTranslatableTextNodes(root, out){
   }, false);
   var node;
   while ((node = walker.nextNode())) out.push(node);
+}
+
+function compactPromptText(text){
+  return (text || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function truncatePromptText(text, maxLen){
+  var compact = compactPromptText(text);
+  if (!maxLen || compact.length <= maxLen) return compact;
+  return compact.substring(0, maxLen - 1).trim() + '…';
+}
+
+function makeTranslationChunk(text, context, role){
+  return {
+    text: compactPromptText(text),
+    context: truncatePromptText(context || '', 700),
+    role: role || ''
+  };
+}
+
+function getTranslationChunkText(chunk){
+  if (chunk && typeof chunk === 'object') return chunk.text || '';
+  return String(chunk || '');
+}
+
+function getTranslationChunkContext(chunk){
+  if (chunk && typeof chunk === 'object') return chunk.context || '';
+  return '';
+}
+
+function getTranslationChunkRole(chunk){
+  if (chunk && typeof chunk === 'object') return chunk.role || '';
+  return '';
+}
+
+function isContextBlockTag(tag){
+  return /^(P|DIV|LI|TD|TH|CAPTION|H[1-6]|BLOCKQUOTE|SECTION|ARTICLE)$/i.test(tag || '');
+}
+
+function getNodeContextText(node, root){
+  var el = node && node.parentNode;
+  var bestText = compactPromptText(node && node.nodeValue);
+  while (el && el !== root && el.nodeType === 1) {
+    var tag = el.tagName || '';
+    var text = compactPromptText(el.textContent || '');
+    if (text && text.length > bestText.length) bestText = text;
+    if (isContextBlockTag(tag) && text.length >= 12 && text.length <= 900) return text;
+    if (isContextBlockTag(tag) && text.length > 900) return '';
+    el = el.parentNode;
+  }
+  return truncatePromptText(bestText, 900);
+}
+
+function buildDocumentTranslationContext(root, subject){
+  var bodyText = compactPromptText(root && root.textContent);
+  var pieces = [];
+  if (subject) pieces.push('Subject: ' + compactPromptText(subject));
+  if (bodyText) pieces.push('Body: ' + bodyText);
+  return truncatePromptText(pieces.join(' | '), 3500);
+}
+
+function buildContextualTranslationPayload(root, textNodes, subject){
+  var documentContext = buildDocumentTranslationContext(root, subject);
+  var chunks = (textNodes || []).map(function(node){
+    var rawText = node.nodeValue || '';
+    var cleanText = compactPromptText(rawText);
+    var context = getNodeContextText(node, root);
+    if (normalizeTextForMatch(context) === normalizeTextForMatch(cleanText)) context = '';
+    return makeTranslationChunk(cleanText, context, '');
+  });
+  return {documentContext: documentContext, chunks: chunks};
 }
 
 function collectHtmlInterleaveBlocks(root){
@@ -2031,10 +2096,12 @@ function htmlToPlainText(html){
 function getTranslationStyleRules(srcLang, tgtLang){
   var common =
     'STYLE: Translate meaning naturally, not word order. Use polished corporate email tone. ' +
-    'Preserve names, teams, products, URLs, emails, numbers, and dates.\n';
+    'Preserve names, teams, products, URLs, emails, numbers, and dates. ' +
+    'Use the surrounding context to resolve short fragments, headings, event titles, and bullet items.\n';
   if (tgtLang === 'English') {
     return common +
       'KO→EN: rewrite into fluent business English. Make requests polite and natural. ' +
+      'For Korean headings, produce concise natural English headings, not literal word-by-word fragments. ' +
       'Render Korean closings like "OO 드림/올림" as "Best regards, OO". Avoid literal Korean syntax.\n\n';
   }
   if (tgtLang === 'Korean') {
@@ -2055,9 +2122,14 @@ function estimateTextMaxTokens(subject, body, provider){
   return clampTokenBudget(Math.ceil(chars * 1.2) + 1200, 1500, hardMax);
 }
 
-function estimateChunkedMaxTokens(chunks, provider){
+function estimateChunkedMaxTokens(chunks, provider, options){
   var chars = 0;
-  (chunks || []).forEach(function(c){ chars += String(c || '').length; });
+  (chunks || []).forEach(function(c){
+    chars += getTranslationChunkText(c).length;
+    var ctx = getTranslationChunkContext(c);
+    if (ctx) chars += Math.min(ctx.length, 500);
+  });
+  if (options && options.documentContext) chars += Math.min(options.documentContext.length, 2500);
   var hardMax = provider === 'claude' ? TRANSLATE_MAX_TOKENS_CLAUDE : TRANSLATE_MAX_TOKENS_OPENAI;
   // JSON 배열 오버헤드가 있어 청크 개수당 여유를 둔다.
   return clampTokenBudget(Math.ceil(chars * 1.1) + (chunks.length * 22) + 900, 1800, hardMax);
@@ -2198,7 +2270,7 @@ var TRANSLATE_BATCH_SIZE_OPENAI = 80;   // OpenAI는 출력 한도 때문에 보
 var TRANSLATE_MAX_TOKENS_CLAUDE = 32000; // Claude 응답 한도
 var TRANSLATE_MAX_TOKENS_OPENAI = 16000; // gpt-4o-mini 응답 한도(16384가 상한)
 
-function translateChunked(provider, key, chunks, srcLang, tgtLang, modelId){
+function translateChunked(provider, key, chunks, srcLang, tgtLang, modelId, options){
   // 배치로 분할
   var batches = [];
   var batchSize = provider === 'claude' ? TRANSLATE_BATCH_SIZE_CLAUDE : TRANSLATE_BATCH_SIZE_OPENAI;
@@ -2212,7 +2284,7 @@ function translateChunked(provider, key, chunks, srcLang, tgtLang, modelId){
   var p = Promise.resolve();
   batches.forEach(function(batch, bIdx){
     p = p.then(function(){
-      return translateOneBatch(provider, key, batch, srcLang, tgtLang, modelId, bIdx, batches.length);
+      return translateOneBatch(provider, key, batch, srcLang, tgtLang, modelId, bIdx, batches.length, options || {});
     }).then(function(batchResults){
       allTranslations = allTranslations.concat(batchResults);
     });
@@ -2220,16 +2292,35 @@ function translateChunked(provider, key, chunks, srcLang, tgtLang, modelId){
   return p.then(function(){ return allTranslations; });
 }
 
-function translateOneBatch(provider, key, batchChunks, srcLang, tgtLang, modelId, bIdx, total){
+function translateOneBatch(provider, key, batchChunks, srcLang, tgtLang, modelId, bIdx, total, options){
   // 배치 내부에서 id는 0부터 다시 시작 (AI가 헷갈리지 않게)
-  var chunksJson = batchChunks.map(function(c, i){ return {id: i, text: c}; });
-  var promptUser = 'Translate each chunk below from ' + srcLang + ' to ' + tgtLang +
+  var chunksJson = batchChunks.map(function(c, i){
+    var item = {id: i, text: getTranslationChunkText(c)};
+    var role = getTranslationChunkRole(c);
+    var context = getTranslationChunkContext(c);
+    if (role) item.role = role;
+    if (context && normalizeTextForMatch(context) !== normalizeTextForMatch(item.text)) item.context = context;
+    return item;
+  });
+  var documentContext = truncatePromptText(options && options.documentContext ? options.documentContext : '', 2600);
+  var promptUser = '';
+  if (documentContext) {
+    promptUser += 'FULL EMAIL CONTEXT for meaning only. Do NOT translate this as a separate output:\n' +
+      documentContext + '\n\n';
+  }
+  promptUser += 'Translate each chunk below from ' + srcLang + ' to ' + tgtLang +
     '. Return ONLY a JSON array in this exact format: [{"id":0,"translation":"..."},{"id":1,"translation":"..."}]. ' +
-    'Preserve the order. Include ALL ' + batchChunks.length + ' chunks in the response. Chunks:\n' +
+    'Preserve the order. Include ALL ' + batchChunks.length + ' chunks in the response. ' +
+    'Use each chunk context for meaning, but translate ONLY the text field. Chunks:\n' +
     JSON.stringify(chunksJson);
   var sysMsg = 'Professional translator translating from ' + srcLang + ' to ' + tgtLang + '. ' +
     'Translate accurately and naturally. Return ONLY a valid JSON array, no markdown, no explanation.\n\n' +
     getTranslationStyleRules(srcLang, tgtLang) +
+    'CONTEXT RULES (critical):\n' +
+    '- The email was split to preserve Outlook formatting. Chunks may be tiny fragments of one title, sentence, bullet, or table cell.\n' +
+    '- Use FULL EMAIL CONTEXT and each item.context to infer the natural wording of each fragment.\n' +
+    '- Do not translate item.context itself unless the same words are also in item.text.\n' +
+    '- Keep each output as the replacement text for that exact fragment. Do not combine, omit, or move content across IDs.\n\n' +
     'LANGUAGE RULES (critical):\n' +
     '- Each chunk is a fragment of a larger ' + srcLang + ' document, split by HTML structure.\n' +
     '- If a chunk is ALREADY in ' + tgtLang + ' (e.g. brand names, technical terms, proper nouns, embedded English words in a Korean document, or vice versa), return it UNCHANGED. Do NOT back-translate.\n' +
@@ -2243,7 +2334,7 @@ function translateOneBatch(provider, key, batchChunks, srcLang, tgtLang, modelId
     '(5) Prefer Korean-style quotes (\u201C \u201D \u300C \u300D) over straight ASCII quotes in Korean output to avoid JSON escaping issues.';
 
   if (provider === 'claude') {
-    var claudeMaxTokens = estimateChunkedMaxTokens(batchChunks, 'claude');
+    var claudeMaxTokens = estimateChunkedMaxTokens(batchChunks, 'claude', options);
     return fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
       headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
@@ -2257,7 +2348,7 @@ function translateOneBatch(provider, key, batchChunks, srcLang, tgtLang, modelId
       return parseChunkedResult(raw, batchChunks, stopReason, bIdx, total);
     });});
   } else {
-    var openaiMaxTokens = estimateChunkedMaxTokens(batchChunks, 'openai');
+    var openaiMaxTokens = estimateChunkedMaxTokens(batchChunks, 'openai', options);
     return fetch('https://api.openai.com/v1/chat/completions',{
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
@@ -2281,13 +2372,22 @@ function parseChunkedResult(raw, originalChunks, stopReason, bIdx, total){
   try {
     var arr = JSON.parse(cleaned);
     if (!Array.isArray(arr)) throw new Error('not array');
-    arr.sort(function(a,b){return (a.id||0) - (b.id||0);});
-    var translations = arr.map(function(item){return item.translation || '';});
-    if (translations.length !== originalChunks.length) {
-      console.warn('[TH]', batchLabel, '청크 수 불일치:', translations.length, 'vs', originalChunks.length);
-      while (translations.length < originalChunks.length) {
-        translations.push(originalChunks[translations.length]);
+    var translations = new Array(originalChunks.length);
+    arr.forEach(function(item){
+      var id = parseInt(item && item.id, 10);
+      if (!isNaN(id) && id >= 0 && id < originalChunks.length) {
+        translations[id] = item.translation || '';
       }
+    });
+    var missing = 0;
+    for (var ti = 0; ti < translations.length; ti++) {
+      if (translations[ti] == null) {
+        translations[ti] = getTranslationChunkText(originalChunks[ti]);
+        missing++;
+      }
+    }
+    if (missing > 0 || arr.length !== originalChunks.length) {
+      console.warn('[TH]', batchLabel, '청크 일부 누락/불일치:', arr.length, 'vs', originalChunks.length, '/ missing:', missing);
     }
     return translations;
   } catch(e) {
@@ -2308,11 +2408,16 @@ function parseChunkedResult(raw, originalChunks, stopReason, bIdx, total){
       try {
         var arr2 = JSON.parse(partial);
         if (Array.isArray(arr2)) {
-          arr2.sort(function(a,b){return (a.id||0) - (b.id||0);});
-          var partialTr = arr2.map(function(item){return item.translation || '';});
-          console.warn('[TH]', batchLabel, '2차(잘림) 복구 성공:', partialTr.length, '/', originalChunks.length);
-          while (partialTr.length < originalChunks.length) {
-            partialTr.push(originalChunks[partialTr.length]);
+          var partialTr = new Array(originalChunks.length);
+          arr2.forEach(function(item){
+            var id = parseInt(item && item.id, 10);
+            if (!isNaN(id) && id >= 0 && id < originalChunks.length) {
+              partialTr[id] = item.translation || '';
+            }
+          });
+          console.warn('[TH]', batchLabel, '2차(잘림) 복구 성공:', arr2.length, '/', originalChunks.length);
+          for (var pi = 0; pi < partialTr.length; pi++) {
+            if (partialTr[pi] == null) partialTr[pi] = getTranslationChunkText(originalChunks[pi]);
           }
           return partialTr;
         }
@@ -2342,7 +2447,7 @@ function parseChunkedResult(raw, originalChunks, stopReason, bIdx, total){
     if (foundCount > 0) {
       // 못 찾은 자리는 원문으로 채움
       for (var i = 0; i < recovered.length; i++) {
-        if (recovered[i] == null) recovered[i] = originalChunks[i];
+        if (recovered[i] == null) recovered[i] = getTranslationChunkText(originalChunks[i]);
       }
       console.warn('[TH]', batchLabel, '3차(정규식) 복구:', foundCount, '/', originalChunks.length,
         '(부족분', originalChunks.length - foundCount, '개는 원문 유지)');
