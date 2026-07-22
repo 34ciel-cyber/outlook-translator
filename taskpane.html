@@ -65,14 +65,6 @@
     .format-toggle { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #666; margin-top: 8px; cursor: pointer; user-select: none; }
     .format-toggle input { cursor: pointer; }
     .format-toggle .info { color: #888; font-size: 10px; margin-left: 4px; }
-    .candidate-panel { margin-top: 8px; border: 1px solid #d8e2f3; border-radius: 6px; background: #f8fbff; padding: 8px; }
-    .candidate-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 6px; }
-    .candidate-title { font-size: 11px; font-weight: 700; color: #4472C4; }
-    .candidate-list { display: flex; flex-direction: column; gap: 6px; max-height: 220px; overflow: auto; }
-    .candidate-item { width: 100%; text-align: left; border: 1px solid #d0d0d0; background: #fff; border-radius: 5px; padding: 7px 8px; cursor: pointer; }
-    .candidate-item:hover { border-color: #4472C4; background: rgba(68,114,196,0.05); }
-    .candidate-meta { font-size: 10px; font-weight: 700; color: #555; margin-bottom: 3px; }
-    .candidate-preview { font-size: 11px; color: #333; line-height: 1.4; word-break: break-word; }
   </style>
 </head>
 <body>
@@ -84,7 +76,8 @@
   먼저 받은 메일에서 <b>전체 회신</b>(또는 회신)을 누른 뒤, <b>회신창에서 Translation Helper를 다시 열어주세요.</b>
 </div>
 <div id="banner-compose" class="banner banner-compose hidden">
-  <b>회신 작성 모드</b> — 인용된 원문이 자동으로 들어왔어요. 번역 후 <b>현재 회신에 삽입</b>을 누르면 바로 적용돼요.
+  <b>회신 작성 모드</b> — 인용된 원문이 자동으로 들어왔어요. 번역 후 <b>현재 회신에 삽입</b>을 누르면 바로 적용돼요.<br>
+  단축키: <b>Ctrl+Enter</b> 번역 · <b>Ctrl+Shift+Enter</b> 삽입
 </div>
 
 <span class="settings-toggle" onclick="toggleSettings()">⚙ API 키 설정</span>
@@ -129,20 +122,12 @@
   <div class="field">
     <div class="lbl">원문 본문 <span class="badge" id="src-badge">자동</span></div>
     <div class="word-count-box" id="word-count-box"><span class="wc-empty" id="word-count">원문을 입력하면 단어 수가 표시됩니다</span></div>
-    <div class="src-hint">메일에서 텍스트 선택 시 그 부분, 안 하면 가장 최근 메일 본문이 들어와요.</div>
+    <div class="src-hint">직전 메일 본문이 자동으로 들어와요. 다른 부분을 번역하려면 메일에서 드래그해 Ctrl+C 후 아래 버튼으로 가져오세요.</div>
     <textarea id="body-orig" placeholder="원문 본문" oninput="onOrigChange()"></textarea>
     <div id="img-warning" class="img-warning hidden">⚠️ 이 메일에 이미지가 포함되어 있어요. 이미지는 자동 처리되지 않으니, 필요하면 텍스트만 선택해 복사한 뒤 [📋 클립보드에서 가져오기]를 눌러주세요.</div>
     <div class="reload-row" style="gap:6px;">
-      <button class="btn-small" onclick="showSourceCandidates()" title="긴 스레드에서 번역할 원문 메일을 직접 고릅니다.">🧭 원문 후보 선택</button>
-      <button class="btn-small" onclick="pasteFromClipboard()" style="background:#4472C4;color:#fff;border-color:#4472C4;">📋 클립보드에서 가져오기</button>
+      <button class="btn-small" onclick="pasteFromClipboard()" style="background:#4472C4;color:#fff;border-color:#4472C4;" title="메일에서 번역할 본문을 드래그한 뒤 Ctrl+C로 복사하고 누르세요.">📋 클립보드에서 가져오기</button>
       <button class="btn-small" onclick="pasteHtmlFromClipboard()" title="메일에서 원하는 본문을 드래그한 뒤 Ctrl+C로 복사하고 누르세요. 가능한 경우 서식 포함 HTML을 가져옵니다.">📋 서식 포함 가져오기</button>
-    </div>
-    <div id="candidate-panel" class="candidate-panel hidden">
-      <div class="candidate-head">
-        <div class="candidate-title">원문 후보</div>
-        <button class="btn-small" onclick="hide('candidate-panel')">닫기</button>
-      </div>
-      <div class="candidate-list" id="candidate-list"></div>
     </div>
     <label class="format-toggle">
       <input type="checkbox" id="format-mode" />
@@ -178,14 +163,13 @@
 <div id="compose-status" class="status hidden"></div>
 
 <script>
-var APP_VERSION = '2026-07-16-quality-context-v13';
+var APP_VERSION = '2026-07-22-streamlined-v14';
 var direction='ko-en', isComposeMode=false, dirManuallySet=false, clipboardOverride=false;
 // 서식 모드 번역 결과의 원본 HTML을 textarea 우회해서 보관 (textarea는 display용)
 var lastHtmlTranslation = null;
 // 교차 삽입용 원문/번역 쌍. HTML 교차 모드는 localStorage 대신 메모리에 보관해 용량 초과를 피함.
 var lastInterleaveData = null;
 var clipboardHtmlOverride = null;
-var sourceCandidates = [];
 function show(id){document.getElementById(id).classList.remove('hidden');}
 function hide(id){document.getElementById(id).classList.add('hidden');}
 
@@ -244,7 +228,6 @@ function clearPendingTranslationState(){
   lastHtmlTranslation = null;
   lastInterleaveData = null;
   clipboardHtmlOverride = null;
-  hide('candidate-panel');
   try { localStorage.removeItem('th_interleave'); } catch(e){}
 }
 
@@ -320,6 +303,15 @@ Office.onReady(function(info){
     var el = document.getElementById(id);
     if (el) el.addEventListener('change', clearPendingTranslationState);
   });
+  // 원문 칸에 직접 Ctrl+V로 붙여넣는 경우도 "부분 원문"으로 취급 →
+  // 회신에 원문이 명시 삽입되도록 clipboardOverride를 켠다.
+  var origTa = document.getElementById('body-orig');
+  if (origTa) {
+    origTa.addEventListener('paste', function(){
+      clipboardOverride = true;
+      setTimeout(function(){ setSrcBadge('직접 붙여넣기', true); }, 0);
+    });
+  }
 });
 
 function setSrcBadge(label,ok){
@@ -331,10 +323,14 @@ function extractBodyFromCompose(){
   Office.context.mailbox.item.body.getAsync(Office.CoercionType.Text, function(r){
     if(r.status !== Office.AsyncResultStatus.Succeeded){
       console.log('[TH] compose body fetch failed');
+      setSrcBadge('추출 실패', false);
+      showStatus('원문 자동 추출에 실패했어요. 메일에서 번역할 본문을 드래그해 Ctrl+C 한 뒤 [📋 클립보드에서 가져오기]를 눌러주세요.', 'error');
       return;
     }
     var fullText = r.value || '';
     console.log('[TH] compose body length:', fullText.length);
+    // 스레드 길이 사전 감지 (From/보낸 사람 헤더 수)
+    var headerCount = (fullText.match(/(^|\n)\s*(From|보낸\s*사람|보낸사람)\s*[:：]/gim) || []).length;
     // 인용된 원문 추출 (From:/보낸 사람: 이후 메일 헤더 건너뛰고 본문만)
     var text = extractQuotedBody(fullText);
     if (text) {
@@ -344,6 +340,12 @@ function extractBodyFromCompose(){
       setSrcBadge('인용 원문', true);
       autoDetectAndSetDir(text);
       updateWordCount(text);
+      if (headerCount >= 3) {
+        showStatus('스레드에 메일이 ' + headerCount + '개 있어요. 자동 추출된 원문이 번역 대상이 맞는지 확인해주세요. 아니라면 원하는 본문을 드래그해 Ctrl+C 후 [📋 클립보드에서 가져오기]를 누르세요.', '');
+      }
+    } else {
+      setSrcBadge('수동 입력 필요', false);
+      showStatus('인용 원문을 자동으로 찾지 못했어요. 번역할 본문을 드래그해 Ctrl+C 한 뒤 [📋 클립보드에서 가져오기]를 눌러주세요.', 'error');
     }
   });
 }
@@ -579,261 +581,6 @@ function getWordCounts(text){
   });
   counts.total = counts.ko + counts.en;
   return counts;
-}
-
-function makeSourceCandidate(html, displayIndex, label){
-  var text = htmlToPlainText(html);
-  var compact = (text || '').replace(/\s+/g, ' ').trim();
-  var lang = detectLanguage(compact);
-  var counts = getWordCounts(compact);
-  return {
-    index: displayIndex,
-    label: label || '',
-    html: html,
-    text: compact,
-    lang: lang || 'unknown',
-    counts: counts,
-    preview: compact.substring(0, 180)
-  };
-}
-
-function buildSourceCandidatesFromFullHtml(fullHtml, referenceText){
-  var quotedHtml = extractQuotedHtml(fullHtml || '');
-  var htmlList = [];
-  var referenceMatchedHtml = findHtmlByReferenceText(fullHtml || '', referenceText || '');
-  if (referenceMatchedHtml) {
-    htmlList.push({html:referenceMatchedHtml, label:'현재 원문칸 HTML'});
-  }
-  if (quotedHtml) {
-    // 자동 추출 결과도 후보에 포함하되, 1번 자리는 아래에서 원문칸과 가장 잘 맞는 후보로 재정렬한다.
-    var autoHtml = keepUntilNextHeader(removeFirstHeaderDiv(quotedHtml));
-    if (htmlToPlainText(autoHtml).length >= 10) htmlList.push({html:autoHtml, label:'자동 추출'});
-
-    var threadCandidates = extractQuotedMessageCandidates(quotedHtml);
-    htmlList = htmlList.concat(threadCandidates);
-    if (threadCandidates.length < 3) {
-      htmlList = htmlList.concat(collectMatchingHtmlContainers(quotedHtml));
-    }
-  }
-
-  var seen = {};
-  var result = [];
-  htmlList.forEach(function(item){
-    var html = (typeof item === 'string') ? item : item.html;
-    var label = (typeof item === 'string') ? '' : item.label;
-    var text = htmlToPlainText(html);
-    var norm = normalizeTextForMatch(text).substring(0, 500);
-    if (!norm || norm.length < 10 || seen[norm]) return;
-    if (referenceText && isCandidateTooLargeForReference(referenceText, text)) {
-      console.log('[TH] 원문 후보 제외 — 원문칸 대비 너무 큼:', label || '(no label)', '/ candidate words:', getWordCounts(text).total);
-      return;
-    }
-    seen[norm] = true;
-    var candidate = makeSourceCandidate(html, result.length + 1, label);
-    candidate.matchScore = referenceText ? scoreTextMatch(referenceText, candidate.text) : 0;
-    candidate.matchStats = referenceText ? getReferenceMatchStats(referenceText, candidate.text) : null;
-    result.push(candidate);
-  });
-
-  if (referenceText && normalizeTextForMatch(referenceText).length >= 10 && result.length > 1) {
-    result.sort(function(a, b){
-      var aPinned = /^현재 원문칸/.test(a.label || '') ? 1 : 0;
-      var bPinned = /^현재 원문칸/.test(b.label || '') ? 1 : 0;
-      if (aPinned !== bPinned) return bPinned - aPinned;
-      return (b.matchScore || 0) - (a.matchScore || 0);
-    });
-    result.forEach(function(c, idx){ c.index = idx + 1; });
-  }
-  return result.slice(0, 25);
-}
-
-function findHtmlByReferenceText(fullHtml, referenceText){
-  if (!fullHtml || !referenceText || normalizeTextForMatch(referenceText).length < 10) return '';
-  try {
-    var parser = new DOMParser();
-    var doc = parser.parseFromString('<!DOCTYPE html><html><body>' + fullHtml + '</body></html>', 'text/html');
-    var refLen = normalizeTextForMatch(referenceText).length;
-    var nodes = doc.body.querySelectorAll('p, div, table, blockquote, li');
-    var best = {weighted:0, score:0, html:'', len:0, node:null};
-    for (var i = 0; i < nodes.length; i++) {
-      var text = (nodes[i].textContent || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
-      if (text.length < 10) continue;
-      var score = scoreTextMatch(referenceText, text);
-      if (score < 0.12) continue;
-      var candLen = normalizeTextForMatch(text).length || 1;
-      var ratio = candLen > refLen ? refLen / candLen : candLen / refLen;
-      if (isCandidateTooLargeForReference(referenceText, text)) continue;
-      var stats = getReferenceMatchStats(referenceText, text);
-      if (!stats.strong) continue;
-      // 전체 스레드처럼 너무 큰 컨테이너는 점수를 낮추고, 원문 길이에 가까운 블록을 우선한다.
-      var weighted = score * Math.max(0.15, ratio);
-      if (weighted > best.weighted) {
-        best = {weighted:weighted, score:score, html:nodes[i].outerHTML || '', len:candLen, node:nodes[i]};
-      }
-    }
-    if (best.html && best.score >= 0.45) {
-      var expanded = expandReferenceHtmlAroundNode(best.node, referenceText) || best.html;
-      var expandedText = htmlToPlainText(expanded);
-      var expandedStats = getReferenceMatchStats(referenceText, expandedText);
-      console.log('[TH] 원문칸 기준 HTML 후보 발견 — score:', best.score.toFixed(2), '/ weighted:', best.weighted.toFixed(2), '/ len:', best.len, '/ expanded coverage:', expandedStats.coverage.toFixed(2), '/ ratio:', expandedStats.lengthRatio.toFixed(2));
-      if (isCandidateTooLargeForReference(referenceText, expandedText)) {
-        console.log('[TH] 확장 후보 폐기 — 원문칸 대비 너무 큼:', getWordCounts(expandedText).total);
-        return '';
-      }
-      return expanded;
-    }
-  } catch(e) {
-    console.log('[TH] 원문칸 기준 HTML 검색 실패:', e.message);
-  }
-  return '';
-}
-
-function isHeaderBoundaryNode(node){
-  if (!node) return false;
-  if (node.nodeType === 1 && (node.tagName || '').toUpperCase() === 'HR') return true;
-  var text = (node.textContent || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
-  return /^(From|Sent|To|Cc|Bcc|Subject|보낸\s*사람|보낸\s*날짜|받는\s*사람|참조|숨은\s*참조|제목|발신)\s*[:：]/i.test(text);
-}
-
-function siblingOuterHtml(node){
-  if (!node) return '';
-  if (node.nodeType === 1) return node.outerHTML || '';
-  if (node.nodeType === 3) return esc(node.nodeValue || '');
-  return '';
-}
-
-function htmlFromSiblingRange(siblings, start, end){
-  var parts = [];
-  for (var i = start; i <= end; i++) parts.push(siblingOuterHtml(siblings[i]));
-  return parts.join('');
-}
-
-function containsReferenceEdge(candidateText, referenceText, edge){
-  var cand = normalizeTextForMatch(candidateText);
-  var ref = normalizeTextForMatch(referenceText);
-  if (!cand || !ref) return false;
-  var snippet = edge === 'start'
-    ? ref.substring(0, Math.min(90, ref.length)).trim()
-    : ref.substring(Math.max(0, ref.length - 90)).trim();
-  if (snippet.length < 25) return true;
-  return cand.indexOf(snippet) >= 0;
-}
-
-function expandReferenceHtmlAroundNode(node, referenceText){
-  if (!node || !node.parentNode || !referenceText) return '';
-  var parent = node.parentNode;
-  var siblings = Array.prototype.slice.call(parent.childNodes).filter(function(n){
-    if (n.nodeType === 3) return !!(n.nodeValue || '').trim();
-    return n.nodeType === 1;
-  });
-  var idx = siblings.indexOf(node);
-  if (idx < 0) return node.outerHTML || '';
-
-  var start = idx;
-  var end = idx;
-  var guard = 0;
-  while (start > 0 && guard++ < 30) {
-    if (isHeaderBoundaryNode(siblings[start - 1])) break;
-    var testHtml = htmlFromSiblingRange(siblings, start - 1, end);
-    var testText = htmlToPlainText(testHtml);
-    start--;
-    if (containsReferenceEdge(testText, referenceText, 'start')) break;
-  }
-
-  guard = 0;
-  while (end < siblings.length - 1 && guard++ < 40) {
-    if (isHeaderBoundaryNode(siblings[end + 1])) break;
-    var testHtml2 = htmlFromSiblingRange(siblings, start, end + 1);
-    var testText2 = htmlToPlainText(testHtml2);
-    end++;
-    if (containsReferenceEdge(testText2, referenceText, 'end')) break;
-    var refLen = normalizeTextForMatch(referenceText).length || 1;
-    var testLen = normalizeTextForMatch(testText2).length || 1;
-    if (testLen > refLen * 1.8) break;
-  }
-
-  var expanded = htmlFromSiblingRange(siblings, start, end);
-  var stats = getReferenceMatchStats(referenceText, htmlToPlainText(expanded));
-  if (stats.coverage >= 0.60 && stats.lengthRatio >= 0.40 && !isCandidateTooLargeForReference(referenceText, htmlToPlainText(expanded))) return expanded;
-  return node.outerHTML || '';
-}
-
-function renderSourceCandidates(candidates){
-  var panel = document.getElementById('candidate-panel');
-  var list = document.getElementById('candidate-list');
-  if (!panel || !list) return;
-  list.innerHTML = '';
-  if (!candidates || candidates.length === 0) {
-    var empty = document.createElement('div');
-    empty.className = 'src-hint';
-    empty.textContent = '후보를 찾지 못했어요. 필요한 본문을 드래그해 Ctrl+C 후 [서식 포함 가져오기]를 사용해주세요.';
-    list.appendChild(empty);
-    show('candidate-panel');
-    return;
-  }
-  candidates.forEach(function(c, idx){
-    var btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'candidate-item';
-    btn.onclick = function(){ selectSourceCandidate(idx); };
-    var langLabel = c.lang === 'ko' ? '한국어' : (c.lang === 'en' ? '영어' : '언어 미확인');
-    var meta = document.createElement('div');
-    meta.className = 'candidate-meta';
-    meta.textContent = '[' + c.index + '] ' + (c.label ? c.label + ' · ' : '') + langLabel + ' · ' + c.counts.total + '단어' +
-      (c.counts.en ? ' · EN ' + c.counts.en : '') +
-      (c.counts.ko ? ' · KO ' + c.counts.ko : '');
-    var preview = document.createElement('div');
-    preview.className = 'candidate-preview';
-    preview.textContent = c.preview || '(미리보기 없음)';
-    btn.appendChild(meta);
-    btn.appendChild(preview);
-    list.appendChild(btn);
-  });
-  show('candidate-panel');
-}
-
-function showSourceCandidates(){
-  if (!isComposeMode) {
-    showStatus('회신 작성 모드에서만 원문 후보를 선택할 수 있어요.', 'error');
-    return;
-  }
-  showStatus('스레드에서 원문 후보를 찾는 중...');
-  Office.context.mailbox.item.body.getAsync(Office.CoercionType.Html, function(rH){
-    if (rH.status !== Office.AsyncResultStatus.Succeeded) {
-      showStatus('회신 본문 HTML을 가져오지 못했어요.', 'error');
-      return;
-    }
-    var referenceText = (document.getElementById('body-orig').value || '').trim();
-    var fullHtml = rH.value || '';
-    var complexity = getThreadComplexityFromHtml(fullHtml);
-    var isLongThread = isLongThreadForAutoHtml(complexity);
-    sourceCandidates = buildSourceCandidatesFromFullHtml(fullHtml, referenceText);
-    console.log('[TH] 원문 후보 수:', sourceCandidates.length);
-    renderSourceCandidates(sourceCandidates);
-    if (isLongThread) {
-      showStatus('긴 스레드라 후보가 부정확할 수 있어요. 가장 확실한 방법은 본문을 드래그해 Ctrl+C 후 [서식 포함 가져오기]입니다.', 'error');
-    } else if (sourceCandidates.length > 0) {
-      showStatus('원문 후보 ' + sourceCandidates.length + '개를 찾았어요. 번역할 메일을 선택하세요.', 'success');
-    } else {
-      showStatus('원문 후보를 찾지 못했어요.', 'error');
-    }
-  });
-}
-
-function selectSourceCandidate(idx){
-  var c = sourceCandidates[idx];
-  if (!c) return;
-  clipboardOverride = true;
-  var ta = document.getElementById('body-orig');
-  ta.value = c.text;
-  ta.dispatchEvent(new Event('input', { bubbles: true }));
-  clipboardHtmlOverride = c.html;
-  document.getElementById('format-mode').checked = true;
-  setSrcBadge('후보 ' + c.index, true);
-  updateWordCount(c.text);
-  hide('candidate-panel');
-  showStatus('✓ 후보 ' + c.index + '번을 원문으로 선택했어요. 서식 유지 모드로 번역됩니다.', 'success');
-  console.log('[TH] 원문 후보 선택:', c.index, '/ HTML:', c.html.length, '/ Text:', c.text.length);
 }
 
 function collectMatchingHtmlContainers(quotedHtml){
