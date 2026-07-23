@@ -163,7 +163,7 @@
 <div id="compose-status" class="status hidden"></div>
 
 <script>
-var APP_VERSION = '2026-07-22-streamlined-v14';
+var APP_VERSION = '2026-07-22-sentence-quality-v15';
 var direction='ko-en', isComposeMode=false, dirManuallySet=false, clipboardOverride=false;
 // 서식 모드 번역 결과의 원본 HTML을 textarea 우회해서 보관 (textarea는 display용)
 var lastHtmlTranslation = null;
@@ -1524,38 +1524,115 @@ function translateHtmlStructurally(htmlString, provider, key, srcLang, tgtLang, 
     var docu = parser.parseFromString('<!DOCTYPE html><html><body>'+htmlString+'</body></html>', 'text/html');
     var root = docu.body;
 
-    var textNodes = [];
-    collectTranslatableTextNodes(root, textNodes);
+    // 문단/셀 단위 그룹으로 병합 — Outlook이 단어마다 span을 쪼개도 문장 단위로 번역
+    var groups = collectTranslatableGroups(root);
 
-    if (textNodes.length === 0) {
+    if (groups.length === 0) {
       resolve({translatedSubject: subject, translatedBody: htmlString});
       return;
     }
 
-    var prep = buildContextualTranslationPayload(root, textNodes, subject);
+    var prep = buildGroupTranslationPayload(root, groups, subject);
     var allChunks = [makeTranslationChunk(subject || '(none)', prep.documentContext, 'subject')]
       .concat(prep.chunks);
-    console.log('[TH] 서식 품질 모드 — 텍스트 노드:', textNodes.length, '/ 문맥 길이:', prep.documentContext.length);
+    console.log('[TH] 서식 품질 모드 — 문단 그룹:', groups.length, '/ 문맥 길이:', prep.documentContext.length);
 
     translateChunked(provider, key, allChunks, srcLang, tgtLang, modelId, {documentContext: prep.documentContext})
       .then(function(translations){
         var translatedSubject = (translations[0] && translations[0].trim()) || subject;
-        // 원본의 leading/trailing 공백을 보존하면서 텍스트만 교체
-        textNodes.forEach(function(n, i){
-          var tr = translations[i+1];
-          if (tr != null && tr !== '') {
-            var orig = n.nodeValue;
-            var leading = (orig.match(/^\s+/) || [''])[0];
-            var trailing = (orig.match(/\s+$/) || [''])[0];
-            n.nodeValue = leading + String(tr).trim() + trailing;
-          }
-        });
+        applyGroupTranslations(groups, translations, 1);
         resolve({
           translatedSubject: translatedSubject,
           translatedBody: root.innerHTML
         });
       })
       .catch(reject);
+  });
+}
+
+// ── 블록 단위 그룹핑 (서식 번역 품질의 핵심) ──────────────────
+// Outlook/Word는 한국어 메일에서 단어마다 <span>을 쪼개므로, 텍스트 노드를
+// 개별 번역하면 어순이 반대인 한↔영에서 단어 샐러드가 된다.
+// 같은 블록(문단·리스트 항목·표 셀) 안의 텍스트 노드들을 하나로 묶어
+// 문장 단위로 번역하고, 결과는 그룹의 주 노드에 넣는다.
+var TH_BLOCK_TAGS = {P:1,DIV:1,LI:1,TD:1,TH:1,H1:1,H2:1,H3:1,H4:1,H5:1,H6:1,
+  BLOCKQUOTE:1,PRE:1,CAPTION:1,DT:1,DD:1,BODY:1,TABLE:1,TR:1,THEAD:1,TBODY:1,TFOOT:1,UL:1,OL:1};
+
+function nearestBlockAncestor(node, root){
+  var cur = node.parentNode;
+  while (cur && cur !== root) {
+    if (cur.nodeType === 1 && TH_BLOCK_TAGS[cur.tagName]) return cur;
+    cur = cur.parentNode;
+  }
+  return root;
+}
+
+function collectTranslatableGroups(root){
+  var docu = root.ownerDocument;
+  var groups = [];
+  var current = null;
+  var walker = docu.createTreeWalker(root, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, {
+    acceptNode: function(n){
+      if (n.nodeType === 1) {
+        var tag = n.tagName;
+        if (tag === 'SCRIPT' || tag === 'STYLE') return NodeFilter.FILTER_REJECT;
+        // 블록 요소와 <br>은 그룹 경계 마커로만 사용
+        if (tag === 'BR' || TH_BLOCK_TAGS[tag]) return NodeFilter.FILTER_ACCEPT;
+        return NodeFilter.FILTER_SKIP;
+      }
+      return NodeFilter.FILTER_ACCEPT; // 텍스트는 공백 포함 전부 (공백 보존용)
+    }
+  }, false);
+  var node;
+  while ((node = walker.nextNode())) {
+    if (node.nodeType === 1) { current = null; continue; } // 경계 → 그룹 끊기
+    var block = nearestBlockAncestor(node, root);
+    if (!current || current.block !== block) {
+      current = {block: block, nodes: []};
+      groups.push(current);
+    }
+    current.nodes.push(node);
+  }
+  groups.forEach(function(g){
+    var joined = g.nodes.map(function(n){ return n.nodeValue || ''; }).join('');
+    g.text = compactPromptText(joined);
+    g.mainIndex = 0;
+    var maxLen = -1;
+    g.nodes.forEach(function(n, i){
+      var L = (n.nodeValue || '').trim().length;
+      if (L > maxLen) { maxLen = L; g.mainIndex = i; }
+    });
+  });
+  return groups.filter(function(g){ return g.text && g.text.length > 0; });
+}
+
+function buildGroupTranslationPayload(root, groups, subject){
+  var documentContext = buildDocumentTranslationContext(root, subject);
+  var chunks = groups.map(function(g, i){
+    var prev = i > 0 ? groups[i-1].text : '';
+    var next = i < groups.length - 1 ? groups[i+1].text : '';
+    var context = '';
+    if (prev) context += 'PREV: ' + truncatePromptText(prev, 200);
+    if (next) context += (context ? ' | ' : '') + 'NEXT: ' + truncatePromptText(next, 200);
+    return makeTranslationChunk(g.text, context, '');
+  });
+  return {documentContext: documentContext, chunks: chunks};
+}
+
+function applyGroupTranslations(groups, translations, offset){
+  groups.forEach(function(g, i){
+    var tr = translations[i + offset];
+    if (tr == null || tr === '') return;
+    g.nodes.forEach(function(n, j){
+      if (j === g.mainIndex) {
+        var orig = n.nodeValue || '';
+        var leading = (orig.match(/^\s+/) || [''])[0];
+        var trailing = (orig.match(/\s+$/) || [''])[0];
+        n.nodeValue = leading + String(tr).trim() + trailing;
+      } else if ((n.nodeValue || '').trim().length > 0) {
+        n.nodeValue = ''; // 나머지 조각은 비움 (공백-only 노드는 그대로 둠)
+      }
+    });
   });
 }
 
@@ -1586,12 +1663,13 @@ function translateHtmlInterleaved(htmlString, provider, key, srcLang, tgtLang, m
       };
     });
 
-    var textNodes = [];
+    var allGroups = [];
     items.forEach(function(item){
-      collectTranslatableTextNodes(item.translatedNode, textNodes);
+      var g = collectTranslatableGroups(item.translatedNode);
+      allGroups = allGroups.concat(g);
     });
 
-    if (textNodes.length === 0) {
+    if (allGroups.length === 0) {
       var unchangedBlocks = items.map(function(item){
         return {originalHtml: item.originalHtml, translatedHtml: item.originalHtml};
       });
@@ -1605,21 +1683,14 @@ function translateHtmlInterleaved(htmlString, provider, key, srcLang, tgtLang, m
       return;
     }
 
-    var prep = buildContextualTranslationPayload(root, textNodes, subject);
+    var prep = buildGroupTranslationPayload(root, allGroups, subject);
     var allChunks = [makeTranslationChunk(subject || '(none)', prep.documentContext, 'subject')]
       .concat(prep.chunks);
+    console.log('[TH] 서식+교차 — 문단 그룹:', allGroups.length);
     translateChunked(provider, key, allChunks, srcLang, tgtLang, modelId, {documentContext: prep.documentContext})
       .then(function(translations){
         var translatedSubject = (translations[0] && translations[0].trim()) || subject;
-        textNodes.forEach(function(n, i){
-          var tr = translations[i+1];
-          if (tr != null && tr !== '') {
-            var orig = n.nodeValue;
-            var leading = (orig.match(/^\s+/) || [''])[0];
-            var trailing = (orig.match(/\s+$/) || [''])[0];
-            n.nodeValue = leading + String(tr).trim() + trailing;
-          }
-        });
+        applyGroupTranslations(allGroups, translations, 1);
 
         var blocks = items.map(function(item){
           return {
@@ -1637,20 +1708,6 @@ function translateHtmlInterleaved(htmlString, provider, key, srcLang, tgtLang, m
       })
       .catch(reject);
   });
-}
-
-function collectTranslatableTextNodes(root, out){
-  var docu = root.ownerDocument;
-  var walker = docu.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-    acceptNode: function(n){
-      var parentTag = n.parentNode && n.parentNode.tagName;
-      if (parentTag === 'SCRIPT' || parentTag === 'STYLE') return NodeFilter.FILTER_REJECT;
-      if (!n.nodeValue || !n.nodeValue.trim()) return NodeFilter.FILTER_REJECT;
-      return NodeFilter.FILTER_ACCEPT;
-    }
-  }, false);
-  var node;
-  while ((node = walker.nextNode())) out.push(node);
 }
 
 function compactPromptText(text){
@@ -1690,38 +1747,12 @@ function isContextBlockTag(tag){
   return /^(P|DIV|LI|TD|TH|CAPTION|H[1-6]|BLOCKQUOTE|SECTION|ARTICLE)$/i.test(tag || '');
 }
 
-function getNodeContextText(node, root){
-  var el = node && node.parentNode;
-  var bestText = compactPromptText(node && node.nodeValue);
-  while (el && el !== root && el.nodeType === 1) {
-    var tag = el.tagName || '';
-    var text = compactPromptText(el.textContent || '');
-    if (text && text.length > bestText.length) bestText = text;
-    if (isContextBlockTag(tag) && text.length >= 12 && text.length <= 900) return text;
-    if (isContextBlockTag(tag) && text.length > 900) return '';
-    el = el.parentNode;
-  }
-  return truncatePromptText(bestText, 900);
-}
-
 function buildDocumentTranslationContext(root, subject){
   var bodyText = compactPromptText(root && root.textContent);
   var pieces = [];
   if (subject) pieces.push('Subject: ' + compactPromptText(subject));
   if (bodyText) pieces.push('Body: ' + bodyText);
   return truncatePromptText(pieces.join(' | '), 3500);
-}
-
-function buildContextualTranslationPayload(root, textNodes, subject){
-  var documentContext = buildDocumentTranslationContext(root, subject);
-  var chunks = (textNodes || []).map(function(node){
-    var rawText = node.nodeValue || '';
-    var cleanText = compactPromptText(rawText);
-    var context = getNodeContextText(node, root);
-    if (normalizeTextForMatch(context) === normalizeTextForMatch(cleanText)) context = '';
-    return makeTranslationChunk(cleanText, context, '');
-  });
-  return {documentContext: documentContext, chunks: chunks};
 }
 
 function collectHtmlInterleaveBlocks(root){
@@ -2064,7 +2095,7 @@ function translateOneBatch(provider, key, batchChunks, srcLang, tgtLang, modelId
     'Translate accurately and naturally. Return ONLY a valid JSON array, no markdown, no explanation.\n\n' +
     getTranslationStyleRules(srcLang, tgtLang) +
     'CONTEXT RULES (critical):\n' +
-    '- The email was split to preserve Outlook formatting. Chunks may be tiny fragments of one title, sentence, bullet, or table cell.\n' +
+    '- The email was split by paragraph, list item, or table cell to preserve Outlook formatting. Each chunk is one complete unit: translate it as natural, fluent ' + tgtLang + ', reordering words freely within the chunk.\n' +
     '- Use FULL EMAIL CONTEXT and each item.context to infer the natural wording of each fragment.\n' +
     '- Do not translate item.context itself unless the same words are also in item.text.\n' +
     '- Keep each output as the replacement text for that exact fragment. Do not combine, omit, or move content across IDs.\n\n' +
