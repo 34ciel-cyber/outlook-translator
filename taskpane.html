@@ -80,7 +80,7 @@
   단축키: <b>Ctrl+Enter</b> 번역 · <b>Ctrl+Shift+Enter</b> 삽입
 </div>
 
-<span class="settings-toggle" onclick="toggleSettings()">⚙ API 키 설정</span>
+<span class="settings-toggle" onclick="toggleSettings()">⚙ API 키 · 용어집 설정</span>
 <div class="settings-panel hidden" id="settings-panel">
   <div class="settings-row">
     <div class="settings-label">Claude (Anthropic) — sk-ant-...</div>
@@ -97,6 +97,15 @@
       <button class="api-save-btn" onclick="saveKey('openai')">저장</button>
     </div>
     <div class="key-status" id="status-openai"></div>
+  </div>
+  <div class="settings-row" style="border-top:1px solid #e0e0e0; padding-top:8px; margin-top:8px;">
+    <div class="settings-label">용어집 (한국어 = English, 한 줄에 하나)</div>
+    <textarea id="glossary-input" style="width:100%; min-height:90px; font-size:11px; font-family:'Segoe UI',sans-serif; border:1px solid #d0d0d0; border-radius:5px; padding:6px 8px;" placeholder="예) 동향 보고서 = sentiment report"></textarea>
+    <div class="api-row" style="margin-top:6px;">
+      <button class="api-save-btn" onclick="saveGlossary()">용어집 저장</button>
+      <span class="key-status" id="status-glossary" style="margin-left:6px;"></span>
+    </div>
+    <div class="src-hint" style="margin-top:4px;">여기 등록한 용어는 번역 시 항상 이 짝으로 번역돼요. 한↔영 양방향 모두 적용됩니다.</div>
   </div>
 </div>
 
@@ -163,7 +172,7 @@
 <div id="compose-status" class="status hidden"></div>
 
 <script>
-var APP_VERSION = '2026-07-22-sentence-quality-v15';
+var APP_VERSION = '2026-07-22-glossary-v16';
 var direction='ko-en', isComposeMode=false, dirManuallySet=false, clipboardOverride=false;
 // 서식 모드 번역 결과의 원본 HTML을 textarea 우회해서 보관 (textarea는 display용)
 var lastHtmlTranslation = null;
@@ -178,6 +187,75 @@ var KEY_MAP={claude:'anthropic_api_key', openai:'openai_api_key'};
 var MODEL_IDS={'claude-haiku':'claude-haiku-4-5-20251001','claude-sonnet':'claude-sonnet-4-6'};
 // 드롭다운 값 → API 프로바이더 (키 조회 + 분기용)
 function engineProvider(eng){ return (eng && eng.indexOf('claude') === 0) ? 'claude' : 'openai'; }
+var GLOSSARY_STORAGE_KEY = 'th_glossary_v1';
+var DEFAULT_GLOSSARY = [
+  ['동향 보고서', 'sentiment report'],
+  ['동향', 'sentiment'],
+  ['복합 동향', 'mixed sentiment'],
+  ['긍정 동향', 'positive sentiment'],
+  ['부정 동향', 'negative sentiment']
+];
+
+function getGlossaryPairs(){
+  try {
+    var raw = localStorage.getItem(GLOSSARY_STORAGE_KEY);
+    if (raw === null) return DEFAULT_GLOSSARY.slice();
+    var parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed;
+  } catch(e){}
+  return DEFAULT_GLOSSARY.slice();
+}
+
+function glossaryPairsToText(pairs){
+  return (pairs || []).map(function(p){ return p[0] + ' = ' + p[1]; }).join('\n');
+}
+
+function parseGlossaryText(text){
+  var pairs = [];
+  (text || '').split(/\n/).forEach(function(line){
+    var t = line.trim();
+    if (!t) return;
+    var eq = t.indexOf('=');
+    if (eq < 0) return;
+    var ko = t.substring(0, eq).trim();
+    var en = t.substring(eq + 1).trim();
+    if (ko && en) pairs.push([ko, en]);
+  });
+  return pairs;
+}
+
+function loadGlossaryUI(){
+  var ta = document.getElementById('glossary-input');
+  if (ta) ta.value = glossaryPairsToText(getGlossaryPairs());
+}
+
+function saveGlossary(){
+  var ta = document.getElementById('glossary-input');
+  var el = document.getElementById('status-glossary');
+  if (!ta) return;
+  var pairs = parseGlossaryText(ta.value);
+  try {
+    localStorage.setItem(GLOSSARY_STORAGE_KEY, JSON.stringify(pairs));
+    if (el){ el.textContent = '✓ ' + pairs.length + '개 용어 저장됨'; el.className = 'key-status ok'; }
+  } catch(e){
+    if (el){ el.textContent = '저장 실패'; el.className = 'key-status none'; }
+  }
+}
+
+// 번역 프롬프트에 넣을 글로서리 지시문 생성 (방향에 맞게)
+function buildGlossaryInstruction(srcLang, tgtLang){
+  var pairs = getGlossaryPairs();
+  if (!pairs.length) return '';
+  var lines = pairs.map(function(p){
+    var ko = p[0], en = p[1];
+    if (tgtLang === 'English') return '- "' + ko + '" \u2192 "' + en + '"';
+    return '- "' + en + '" \u2192 "' + ko + '"';
+  });
+  return 'GLOSSARY (MANDATORY): Always translate these exact terms as specified. ' +
+    'Match the longest term first; apply consistently everywhere.\n' +
+    lines.join('\n') + '\n\n';
+}
+
 function loadAllKeys(){
   ['claude','openai'].forEach(function(eng){
     var k=localStorage.getItem(KEY_MAP[eng])||'';
@@ -263,6 +341,7 @@ Office.onReady(function(info){
   var versionTag = document.getElementById('version-tag');
   if (versionTag) versionTag.textContent = 'v ' + APP_VERSION;
   loadAllKeys();
+  loadGlossaryUI();
   if(info.host!==Office.HostType.Outlook) return;
   var item=Office.context.mailbox.item;
   isComposeMode=typeof item.subject!=='string';
@@ -1872,7 +1951,8 @@ function htmlToPlainText(html){
 }
 
 function getTranslationStyleRules(srcLang, tgtLang){
-  var common =
+  var glossary = buildGlossaryInstruction(srcLang, tgtLang);
+  var common = glossary +
     'STYLE: Translate meaning naturally, not word order. Use polished corporate email tone. ' +
     'Preserve names, teams, products, URLs, emails, numbers, and dates. ' +
     'Use the surrounding context to resolve short fragments, headings, event titles, and bullet items.\n';
