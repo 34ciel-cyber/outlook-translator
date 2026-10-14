@@ -77,25 +77,7 @@
   <b>회신 작성 모드</b> — 인용된 원문이 자동으로 들어왔어요. 번역 후 <b>현재 회신에 삽입</b>을 누르면 바로 적용돼요.
 </div>
 
-<span class="settings-toggle" onclick="toggleSettings()">⚙ API 키 설정</span>
-<div class="settings-panel hidden" id="settings-panel">
-  <div class="settings-row">
-    <div class="settings-label">Claude (Anthropic) — sk-ant-...</div>
-    <div class="api-row">
-      <input type="password" id="key-claude" placeholder="sk-ant-..." />
-      <button class="api-save-btn" onclick="saveKey('claude')">저장</button>
-    </div>
-    <div class="key-status" id="status-claude"></div>
-  </div>
-  <div class="settings-row">
-    <div class="settings-label">ChatGPT (OpenAI) — sk-...</div>
-    <div class="api-row">
-      <input type="password" id="key-openai" placeholder="sk-..." />
-      <button class="api-save-btn" onclick="saveKey('openai')">저장</button>
-    </div>
-    <div class="key-status" id="status-openai"></div>
-  </div>
-</div>
+<!-- API 키 설정 UI 제거됨 — 키는 사내 프록시(Krafton Playground) 서버 환경변수로 관리 -->
 
 <div id="read-ui" class="hidden">
   <div class="header-line">
@@ -167,30 +149,10 @@ function hide(id){document.getElementById(id).classList.add('hidden');}
 
 // 사내 프록시 — API 키는 서버(Krafton Playground) 환경변수에만 존재. 클라이언트에 키 불필요.
 var PROXY_URL = 'https://outlooktranslation.krafton.run/api/translate';
-var KEY_MAP={claude:'anthropic_api_key', openai:'openai_api_key'};
 // 드롭다운 값 → Anthropic 모델 ID 매핑
 var MODEL_IDS={'claude-haiku':'claude-haiku-4-5-20251001','claude-sonnet':'claude-sonnet-4-6'};
-// 드롭다운 값 → API 프로바이더 (키 조회 + 분기용)
+// 드롭다운 값 → API 프로바이더 (분기용)
 function engineProvider(eng){ return (eng && eng.indexOf('claude') === 0) ? 'claude' : 'openai'; }
-function loadAllKeys(){
-  ['claude','openai'].forEach(function(eng){
-    var k=localStorage.getItem(KEY_MAP[eng])||'';
-    var el=document.getElementById('status-'+eng);
-    if(el){
-      if(k){document.getElementById('key-'+eng).value=k;el.textContent='✓ 키 저장됨';el.className='key-status ok';}
-      else{el.textContent='키 없음';el.className='key-status none';}
-    }
-  });
-}
-function saveKey(eng){
-  var k=document.getElementById('key-'+eng).value.trim();
-  var el=document.getElementById('status-'+eng);
-  try{
-    if(k){localStorage.setItem(KEY_MAP[eng],k);el.textContent='✓ 저장됐습니다';el.className='key-status ok';}
-    else{localStorage.removeItem(KEY_MAP[eng]);el.textContent='삭제됐습니다';el.className='key-status none';}
-  }catch(e){el.textContent='저장 실패';el.className='key-status none';}
-}
-function toggleSettings(){document.getElementById('settings-panel').classList.toggle('hidden');}
 
 // ── 언어 자동 감지 ──────────────────────────────────────
 function detectLanguage(text){
@@ -245,7 +207,6 @@ function updateWordCount(text){
 }
 
 Office.onReady(function(info){
-  loadAllKeys();
   if(info.host!==Office.HostType.Outlook) return;
   var item=Office.context.mailbox.item;
   isComposeMode=typeof item.subject!=='string';
@@ -266,10 +227,9 @@ Office.onReady(function(info){
   });
   // 회신 본문에서 인용된 원문 추출
   extractBodyFromCompose();
-  // 엔진 기본값
+  // 엔진 기본값 — Haiku (프록시가 키 관리하므로 키 유무 체크 불필요)
   var engineSelect=document.getElementById('engine-select');
-  if(localStorage.getItem(KEY_MAP.claude)) engineSelect.value='claude-haiku';
-  else if(localStorage.getItem(KEY_MAP.openai)) engineSelect.value='openai';
+  engineSelect.value='claude-haiku';
   // 키보드 단축키
   document.addEventListener('keydown', function(e){
     if(e.ctrlKey && e.key === 'Enter'){
